@@ -54,12 +54,9 @@ def register_view(request):
             return redirect("staff_parcels")
         return redirect("cabinet_home")
 
-    pickup_points = PickupPoint.objects.filter(is_active=True).order_by("name")
-
     context = {
         "form_data": {},
         "errors": {},
-        "pickup_points": pickup_points,
     }
 
     if request.method == "GET":
@@ -68,14 +65,12 @@ def register_view(request):
     # POST
     full_name = request.POST.get("full_name", "").strip()
     phone_input = request.POST.get("phone", "")
-    pickup_point_id = request.POST.get("pickup_point", "")
     password = request.POST.get("password", "")
     password_confirm = request.POST.get("password_confirm", "")
 
     phone = _normalize_phone(phone_input)
 
     errors = {}
-    pickup_point_obj = None
 
     # ФИО
     if not full_name:
@@ -93,27 +88,12 @@ def register_view(request):
         errors["password"] = "Укажите пароль и его подтверждение."
     elif password != password_confirm:
         errors["password"] = "Пароли не совпадают."
-    elif len(password) < 8:
-        errors["password"] = "Пароль должен содержать минимум 8 символов."
-
-    # Пункт выдачи
-    if not pickup_point_id:
-        errors["pickup_point"] = "Выберите пункт выдачи."
-    else:
-        try:
-            pickup_point_obj = PickupPoint.objects.get(
-                pk=pickup_point_id,
-                is_active=True,
-            )
-        except PickupPoint.DoesNotExist:
-            errors["pickup_point"] = "Неверный пункт выдачи."
 
     if errors:
         context["errors"] = errors
         context["form_data"] = {
             "full_name": full_name,
             "phone": phone_input,
-            "pickup_point": pickup_point_id,
         }
         return render(request, "register.html", context)
 
@@ -125,11 +105,10 @@ def register_view(request):
     user.first_name = full_name
     user.save()
 
-    # профиль (is_employee по умолчанию False для обычных клиентов)
+    # профиль без пункта выдачи (pickup_point=None)
     CabinetProfile.objects.create(
         user=user,
         phone=phone,
-        pickup_point=pickup_point_obj,
         is_employee=False,
     )
 

@@ -120,57 +120,6 @@
               {% endif %}
             </div>
 
-            <!-- Пункт выдачи -->
-            <div class="form-group">
-              <label class="form-label">Пункт выдачи заказов</label>
-              <div class="select-wrapper">
-                <button
-                  type="button"
-                  class="select-button"
-                  id="pickupButton"
-                >
-                  {% with selected_id=form_data.pickup_point|default:'' %}
-                    {% if selected_id %}
-                      {% for p in pickup_points %}
-                        {% if p.id|stringformat:"s" == selected_id|stringformat:"s" %}
-                          <span id="pickupLabel">
-                            {{ p.name }}{% if p.address %} — {{ p.address }}{% endif %}
-                          </span>
-                        {% endif %}
-                      {% endfor %}
-                    {% else %}
-                      <span id="pickupLabel" class="select-placeholder">
-                        Выберите пункт выдачи
-                      </span>
-                    {% endif %}
-                  {% endwith %}
-                  <span class="select-arrow">⌄</span>
-                </button>
-                <div class="select-dropdown" id="pickupDropdown">
-                  {% for p in pickup_points %}
-                    <button
-                      type="button"
-                      class="select-option"
-                      data-value="{{ p.id }}"
-                    >
-                      {{ p.name }}{% if p.address %} — {{ p.address }}{% endif %}
-                    </button>
-                  {% endfor %}
-                </div>
-              </div>
-              <input
-                type="hidden"
-                name="pickup_point"
-                id="pickupValue"
-                value="{{ form_data.pickup_point|default:'' }}"
-              />
-              {% if errors.pickup_point %}
-                <p class="helper-text" style="color:#dc2626;">
-                  {{ errors.pickup_point }}
-                </p>
-              {% endif %}
-            </div>
-
             <!-- Пароль -->
             <div class="form-group">
               <label for="reg-password" class="form-label">Пароль</label>

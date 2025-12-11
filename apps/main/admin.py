@@ -21,4 +21,7 @@ class CabinetProfileAdmin(admin.ModelAdmin):
     
     
 admin.site.register(PickupPoint)
-admin.site.register(Parcel)
+
+@admin.register(Parcel)
+class ParcelAdmin(admin.ModelAdmin):
+    list_display = ("track_number", "user", "status", "created_at")
