@@ -105,7 +105,7 @@
                 {% endif %}
               </div>
 
-              <div class="form-group">
+              {% comment %} <div class="form-group">
                 <label class="form-label">Пункт выдачи заказов</label>
                 <div class="select-wrapper">
                   <button
@@ -149,7 +149,7 @@
                 {% if errors.pickup_point %}
                   <p class="helper-text" style="color:#dc2626;">{{ errors.pickup_point }}</p>
                 {% endif %}
-              </div>
+              </div> {% endcomment %}
 
               <div class="profile-actions">
                 <button type="submit" class="btn btn--primary">
