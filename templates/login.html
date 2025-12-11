@@ -1,0 +1,170 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>kargoexpress281 — Вход</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+</head>
+<body
+  class="theme-light"
+  data-default-theme="{% if site_settings and site_settings.default_dark_mode %}dark{% else %}light{% endif %}"
+  {% if site_settings %}
+    style="
+      {% if site_settings.bg_light %}
+        --bg-light: url('{{ site_settings.bg_light.url }}');
+      {% endif %}
+      {% if site_settings.bg_dark %}
+        --bg-dark: url('{{ site_settings.bg_dark.url }}');
+      {% endif %}
+    "
+  {% endif %}
+>
+  <div class="page">
+    <!-- Header -->
+    <header class="header">
+      <div class="header__logo">
+        {% if site_settings and site_settings.logo %}
+          <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="header__logo-img" />
+        {% else %}
+          <img src="{% static 'img/logo.png' %}" alt="LIDER CARGO" class="header__logo-img" />
+        {% endif %}
+      </div>
+      <div class="header__tabs">
+        <button class="tab-button tab-button--active" type="button">
+          Вход
+        </button>
+        <button
+          class="tab-button"
+          type="button"
+          data-link="{% url 'register' %}"
+        >
+          Регистрация
+        </button>
+      </div>
+
+      <!-- Переключатель темы -->
+      <button
+        type="button"
+        class="theme-toggle"
+        id="themeToggleBtn"
+        aria-label="Переключить тему"
+      >
+        🌙
+      </button>
+    </header>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="auth-card-wrapper">
+        <div class="auth-card-logo">
+          {% if site_settings and site_settings.logo %}
+            <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="auth-card-logo__img" />
+          {% else %}
+            <img src="{% static 'img/logo.png' %}" alt="LIDER CARGO" class="auth-card-logo__img" />
+          {% endif %}
+        </div>
+
+        <div class="auth-card">
+          <form class="auth-form" id="loginForm" method="post" action="{% url 'login' %}">
+            {% csrf_token %}
+
+            {% if errors.non_field %}
+              <div class="form-error">
+                {{ errors.non_field }}
+              </div>
+            {% endif %}
+
+            <!-- Телефон -->
+            <div class="form-group">
+              <label for="login-phone" class="form-label">Номер телефона</label>
+              <div class="input-wrapper input-wrapper--phone">
+                <span class="input-prefix">+996</span>
+                <input
+                  id="login-phone"
+                  name="phone"
+                  type="tel"
+                  class="input input--phone"
+                  placeholder="000 000 000"
+                  autocomplete="tel"
+                  required
+                  value="{{ form_data.phone|default:'' }}"
+                />
+              </div>
+              {% if errors.phone %}
+                <p class="helper-text" style="color:#dc2626;">
+                  {{ errors.phone }}
+                </p>
+              {% endif %}
+            </div>
+
+            <!-- Пароль -->
+            <div class="form-group">
+              <label for="login-password" class="form-label">Пароль</label>
+              <div class="input-wrapper input-wrapper--password">
+                <input
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  class="input input--password"
+                  placeholder="Введите пароль"
+                  autocomplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  id="loginTogglePassword"
+                  aria-label="Показать пароль"
+                >
+                  <span class="password-toggle__icon" id="loginTogglePasswordIcon">👁</span>
+                </button>
+              </div>
+              {% if errors.password %}
+                <p class="helper-text" style="color:#dc2626;">
+                  {{ errors.password }}
+                </p>
+              {% endif %}
+            </div>
+
+            <!-- Кнопка отправки -->
+            <button type="submit" class="btn btn--primary">
+              Войти
+            </button>
+
+            <!-- Ссылки -->
+            <div class="auth-links">
+              <button type="button" class="auth-link">
+                Забыли пароль?
+              </button>
+              <div class="auth-link-text">
+                Нет аккаунта?
+                <button
+                  type="button"
+                  class="auth-link auth-link--accent"
+                  data-link="{% url 'register' %}"
+                >
+                  Зарегистрироваться
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="auth-info">
+          Безопасный вход в личный кабинет
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>&copy; 2025 kargoexpress281. Все права защищены.</p>
+    </footer>
+  </div>
+
+  <script src="{% static 'js/cabinet-theme.js' %}"></script>
+  <script src="{% static 'js/login.js' %}"></script>
+</body>
+</html>

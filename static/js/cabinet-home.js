@@ -1,0 +1,381 @@
+// static/js/cabinet-home.js
+document.addEventListener("DOMContentLoaded", () => {
+  "use strict";
+
+  // ====== DOM ======
+  const trackAddForm = document.getElementById("trackAddForm");
+  const trackAddInputsContainer = document.getElementById("trackAddInputs");
+  const trackResetBtn = document.getElementById("trackResetBtn");
+
+  const statusCards = document.querySelectorAll(".status-card");
+  const trackListWrapper = document.getElementById("trackListWrapper");
+
+  const statusModal = document.getElementById("statusModal");
+  const statusModalTitle = document.getElementById("statusModalTitle");
+  const statusModalBody = document.getElementById("statusModalBody");
+
+  const historyModal = document.getElementById("historyModal");
+  const historyModalTitle = document.getElementById("historyModalTitle");
+  const historyTimeline = document.getElementById("historyTimeline");
+
+  const trackSearchForm = document.getElementById("trackSearchForm");
+  const trackSearchInput = document.getElementById("trackSearchInput");
+
+  // ====== UTILS ======
+  function openModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  function statusLabel(status) {
+    switch (Number(status)) {
+      case 0:
+        return "Ожидает поступления на склад в Китае";
+      case 1:
+        return "Принят на склад в Китае";
+      case 2:
+        return "Отправлен из Китая";
+      case 3:
+        return "Прибыл в пункт выдачи";
+      case 4:
+        return "Получен";
+      default:
+        return "Неизвестный статус";
+    }
+  }
+
+  // ====== ДИНАМИЧЕСКИЕ ПОЛЯ ДЛЯ ТРЕКОВ (до 5 штук) ======
+  function attachDynamicInputs() {
+    if (!trackAddInputsContainer) return;
+
+    const MAX_INPUTS = 5;
+
+    function updateResetVisibility() {
+      if (!trackResetBtn) return;
+      const inputs = Array.from(
+        trackAddInputsContainer.querySelectorAll("input[name='tracks']")
+      );
+      const hasValue = inputs.some(
+        (inp) => inp.value.trim().length > 0
+      );
+      trackResetBtn.style.display = hasValue ? "inline-block" : "none";
+    }
+
+    function onInputChange() {
+      const inputs = Array.from(
+        trackAddInputsContainer.querySelectorAll("input[name='tracks']")
+      );
+      if (!inputs.length) return;
+
+      updateResetVisibility();
+
+      if (inputs.length >= MAX_INPUTS) return;
+
+      const last = inputs[inputs.length - 1];
+
+      // создаём следующее поле только когда в последнем хотя бы 3 символа
+      if (last && last.value.trim().length >= 3) {
+        const hasEmptyAtEnd =
+          inputs.length > 1 &&
+          inputs[inputs.length - 1].value.trim() === "" &&
+          inputs[inputs.length - 2].value.trim() === "";
+
+        if (hasEmptyAtEnd) return;
+
+        const input = document.createElement("input");
+        input.name = "tracks";
+        input.type = "text";
+        input.className = "input";
+        input.placeholder = "Трек-номер";
+        input.maxLength = 20;
+        input.addEventListener("input", onInputChange);
+        trackAddInputsContainer.appendChild(input);
+      }
+    }
+
+    // навешиваем слушатель на существующее первое поле
+    const firstInput = trackAddInputsContainer.querySelector(
+      "input[name='tracks']"
+    );
+    if (firstInput) {
+      firstInput.addEventListener("input", onInputChange);
+    }
+
+    // обработчик кнопки сброса
+    if (trackResetBtn) {
+      trackResetBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+
+        // очищаем контейнер и создаём одно пустое поле
+        trackAddInputsContainer.innerHTML = "";
+
+        const input = document.createElement("input");
+        input.name = "tracks";
+        input.type = "text";
+        input.className = "input";
+        input.placeholder = "Трек-номер";
+        input.maxLength = 20;
+        input.addEventListener("input", onInputChange);
+        trackAddInputsContainer.appendChild(input);
+
+        // прячем кнопку
+        trackResetBtn.style.display = "none";
+      });
+    }
+
+    // на всякий при первой инициализации
+    if (trackResetBtn) {
+      trackResetBtn.style.display = "none";
+    }
+  }
+
+  attachDynamicInputs();
+
+  // перед отправкой формы чистим пробелы
+  if (trackAddForm && trackAddInputsContainer) {
+    trackAddForm.addEventListener("submit", () => {
+      const inputs = Array.from(
+        trackAddInputsContainer.querySelectorAll("input[name='tracks']")
+      );
+      inputs.forEach((inp) => {
+        inp.value = inp.value.trim().replace(/\s+/g, "");
+      });
+    });
+  }
+
+  // ====== МОДАЛКА СО СПИСКОМ ПО СТАТУСУ ======
+  function openStatusModal(status) {
+    if (!trackListWrapper || !statusModalBody || !statusModalTitle) return;
+
+    const allParcels = Array.from(
+      trackListWrapper.querySelectorAll(".track-item")
+    );
+
+    const filtered = allParcels.filter(
+      (item) => String(item.dataset.status) === String(status)
+    );
+
+    statusModalBody.innerHTML = "";
+
+    if (!filtered.length) {
+      statusModalBody.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state__icon">📭</div>
+          <p>Посылок с таким статусом пока нет.</p>
+        </div>
+      `;
+    } else {
+      const list = document.createElement("div");
+      list.className = "track-list";
+
+      filtered.forEach((item) => {
+        const trackNumber =
+          item.querySelector(".track-item__number")?.textContent?.trim() || "";
+        const statusText =
+          item.querySelector(".track-item__status")?.textContent?.trim() || "";
+        const historyUrl = item.dataset.historyUrl || "";
+        const parcelId = item.dataset.parcelId || "";
+
+        const row = document.createElement("div");
+        row.className = "track-item";
+        row.dataset.historyUrl = historyUrl;
+        row.dataset.parcelId = parcelId;
+
+        row.innerHTML = `
+          <div class="track-item__main">
+            <p class="track-item__number">${trackNumber}</p>
+            <p class="track-item__status">${statusText}</p>
+          </div>
+        `;
+
+        list.appendChild(row);
+      });
+
+      statusModalBody.appendChild(list);
+    }
+
+    statusModalTitle.textContent = statusLabel(status);
+    openModal(statusModal);
+  }
+
+  statusCards.forEach((card) => {
+    card.addEventListener("click", (e) => {
+      e.preventDefault();
+      const status = card.dataset.status;
+      openStatusModal(status);
+    });
+  });
+
+  // ====== ИСТОРИЯ КОНКРЕТНОЙ ПОСЫЛКИ ======
+  function loadParcelHistory(historyUrl, trackNumber) {
+    if (!historyModal || !historyTimeline || !historyModalTitle) return;
+    if (!historyUrl) return;
+
+    historyTimeline.innerHTML = `
+      <div class="empty-state">
+        <p>Загрузка истории...</p>
+      </div>
+    `;
+
+    fetch(historyUrl, {
+      method: "GET",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "application/json",
+      },
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Ошибка загрузки");
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const events = data.events || [];
+        const tn = data.track_number || trackNumber || "";
+
+        historyModalTitle.textContent =
+          "История отслеживания" + (tn ? ` — ${tn}` : "");
+
+        if (!events.length) {
+          historyTimeline.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state__icon">⏳</div>
+              <p>История статусов пока отсутствует.</p>
+            </div>
+          `;
+          openModal(historyModal);
+          return;
+        }
+
+        historyTimeline.innerHTML = events
+          .map((e) => {
+            const dotClass = e.is_latest
+              ? "timeline-item__dot timeline-item__dot--active"
+              : "timeline-item__dot";
+            const statusClass = e.is_latest
+              ? "timeline-item__status timeline-item__status--active"
+              : "timeline-item__status";
+
+            return `
+              <div class="timeline-item">
+                <div class="${dotClass}"></div>
+                <p class="${statusClass}">${e.status_display}</p>
+                ${
+                  e.message
+                    ? `<p class="timeline-item__message">${e.message}</p>`
+                    : ""
+                }
+                <p class="timeline-item__date">${e.datetime}</p>
+              </div>
+            `;
+          })
+          .join("");
+
+        openModal(historyModal);
+      })
+      .catch((err) => {
+        console.error(err);
+        historyTimeline.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state__icon">⚠️</div>
+            <p>Не удалось загрузить историю. Попробуйте позже.</p>
+          </div>
+        `;
+        openModal(historyModal);
+      });
+  }
+
+  // делегирование кликов по модалкам и карточкам
+  document.addEventListener("click", (e) => {
+    // закрытие модалок по кнопке
+    const closeBtn = e.target.closest("[data-modal-close]");
+    if (closeBtn) {
+      const id = closeBtn.getAttribute("data-modal-close");
+      const modal = document.getElementById(id);
+      if (modal) closeModal(modal);
+      return;
+    }
+
+    // клик по backdrop
+    if (e.target.classList.contains("modal__backdrop")) {
+      const modal = e.target.closest(".modal");
+      if (modal) closeModal(modal);
+      return;
+    }
+
+    // клик по карточке посылки
+    const trackItem = e.target.closest(".track-item");
+    if (trackItem && trackItem.dataset.historyUrl) {
+      const url = trackItem.dataset.historyUrl;
+      const trackNumber =
+        trackItem.querySelector(".track-item__number")?.textContent?.trim() ||
+        "";
+      loadParcelHistory(url, trackNumber);
+    }
+  });
+
+  // ====== ПОИСК ПО ТРЕК-НОМЕРУ ======
+  if (trackSearchForm && trackSearchInput && trackListWrapper) {
+    trackSearchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const needle = trackSearchInput.value.trim();
+      if (!needle) return;
+
+      const items = Array.from(
+        trackListWrapper.querySelectorAll(".track-item")
+      );
+      const match = items.find((el) => {
+        const num = el
+          .querySelector(".track-item__number")
+          ?.textContent?.trim();
+        return num && num.includes(needle);
+      });
+
+      if (match && match.dataset.historyUrl) {
+        const url = match.dataset.historyUrl;
+        const trackNumber =
+          match.querySelector(".track-item__number")?.textContent?.trim() ||
+          "";
+        loadParcelHistory(url, trackNumber);
+      } else {
+        alert("Посылка с таким трек-номером не найдена в ваших данных.");
+      }
+    });
+  }
+
+  // ====== ПОКАЗАТЬ ЕЩЁ ДЛЯ "МОИ ПОСЫЛКИ" ======
+  const showMoreBtn = document.getElementById("trackShowMoreBtn");
+  if (showMoreBtn && trackListWrapper) {
+    const step = Number(showMoreBtn.dataset.step || 5);
+
+    showMoreBtn.addEventListener("click", () => {
+      const hiddenItems = Array.from(
+        trackListWrapper.querySelectorAll(".track-item--hidden")
+      );
+
+      if (!hiddenItems.length) {
+        showMoreBtn.style.display = "none";
+        return;
+      }
+
+      hiddenItems.slice(0, step).forEach((el) => {
+        el.classList.remove("track-item--hidden");
+      });
+
+      const stillHidden = trackListWrapper.querySelector(
+        ".track-item--hidden"
+      );
+      if (!stillHidden) {
+        showMoreBtn.style.display = "none";
+      }
+    });
+  }
+});

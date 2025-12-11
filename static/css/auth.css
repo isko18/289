@@ -1,0 +1,514 @@
+:root {
+  --font-size: 16px;
+  --background: #fdf7ff;
+  --background-gradient-from: #f5e9ff;
+  --background-gradient-via: #ffffff;
+  --background-gradient-to: #ffe6f0;
+  --foreground: #111111;
+
+  --primary: #5b21b6;
+  --primary-light: #ec4899;
+
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.06);
+
+  --border-radius-lg: 1.25rem;
+
+  --shadow-soft: 0 20px 35px rgba(15, 23, 42, 0.08);
+  --shadow-soft-hover: 0 24px 45px rgba(15, 23, 42, 0.12);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: radial-gradient(
+      circle at top left,
+      var(--background-gradient-from),
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      var(--background-gradient-to),
+      transparent 50%
+    ),
+    var(--background-gradient-via);
+  color: var(--foreground);
+}
+
+/* PAGE */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* HEADER */
+
+.header {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header__logo-img {
+  height: 40px;
+  display: block;
+}
+
+.header__tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tab-button {
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 0.5rem 1.5rem;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: #4b5563;
+  font-size: 0.95rem;
+  transition: background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease,
+    transform 0.1s ease;
+}
+
+.tab-button:hover {
+  color: var(--primary);
+}
+
+.tab-button--active {
+  background: #ffffff;
+  color: var(--primary);
+  box-shadow: 0 8px 25px rgba(148, 163, 184, 0.25);
+  transform: translateY(-1px);
+}
+
+/* MAIN */
+
+.main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+.auth-card-wrapper {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-card-logo {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.auth-card-logo__img {
+  height: 80px;
+  display: inline-block;
+}
+
+/* CARD */
+
+.auth-card {
+  background: var(--card-bg);
+  border-radius: var(--border-radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid var(--card-border);
+}
+
+/* FORM */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  outline: none;
+  font-size: 0.95rem;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease,
+    background-color 0.15s ease;
+  background-color: #ffffff;
+}
+
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.4);
+}
+
+/* Телефон */
+
+.input-wrapper--phone .input-prefix {
+  position: absolute;
+  left: 1rem;
+  color: #6b7280;
+  font-size: 0.95rem;
+  pointer-events: none;
+}
+
+.input--phone {
+  padding-left: 4rem;
+}
+
+/* Пароль / иконка */
+
+.input-wrapper--password {
+  position: relative;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  outline: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.password-toggle:hover {
+  color: #6b7280;
+}
+
+/* SELECT (пункт выдачи) */
+
+.select-wrapper {
+  position: relative;
+}
+
+.select-button {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #111827;
+}
+
+.select-placeholder {
+  color: #9ca3af;
+}
+
+.select-arrow {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.select-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  background: #ffffff;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.15);
+  overflow: hidden;
+  display: none;
+  z-index: 10;
+}
+
+.select-dropdown--open {
+  display: block;
+}
+
+.select-option {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  text-align: left;
+  border: none;
+  background: #ffffff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.select-option:hover {
+  background: #f5f3ff;
+}
+
+/* BUTTON */
+
+.btn {
+  border: none;
+  outline: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-radius: 0.9rem;
+  padding: 0.8rem 1rem;
+  font-weight: 600;
+  transition: box-shadow 0.15s ease, transform 0.1s ease,
+    background-image 0.2s ease, filter 0.15s ease;
+}
+
+.btn--primary {
+  width: 100%;
+  color: #ffffff;
+  background-image: linear-gradient(
+    90deg,
+    var(--primary),
+    var(--primary-light)
+  );
+  box-shadow: 0 14px 30px rgba(236, 72, 153, 0.35);
+}
+
+.btn--primary:hover {
+  filter: brightness(1.03);
+  box-shadow: var(--shadow-soft-hover);
+  transform: translateY(-1px);
+}
+
+/* LINKS / TEXT */
+
+.auth-links {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.auth-link {
+  border: none;
+  outline: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #6b7280;
+  transition: color 0.15s ease;
+}
+
+.auth-link:hover {
+  color: var(--primary);
+}
+
+.auth-link-text {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.auth-link--accent {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.auth-info {
+  margin-top: 1.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.helper-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* FOOTER */
+
+.footer {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* Адаптив */
+
+@media (max-width: 640px) {
+  .header {
+    padding-inline: 1rem;
+  }
+
+  .auth-card {
+    padding: 1.5rem;
+  }
+
+  .auth-card-logo__img {
+    height: 64px;
+  }
+}
+
+/* ===== ТЕМНАЯ / СВЕТЛАЯ ТЕМА ДЛЯ AUTH ===== */
+
+/* Кнопка переключения темы в шапке */
+.theme-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.4rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  color: #6b7280;
+  margin-left: 0.75rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* Светлая тема (по умолчанию) */
+body.theme-light {
+  background: var(
+    --bg-light,
+    radial-gradient(circle at top left, var(--background-gradient-from), transparent 50%),
+    radial-gradient(circle at bottom right, var(--background-gradient-to), transparent 50%),
+    var(--background-gradient-via)
+  );
+  color: var(--foreground);
+}
+
+/* Тёмная тема */
+body.theme-dark {
+  background: var(--bg-dark, #020617);
+  color: #e5e7eb;
+}
+
+/* Карточка авторизации */
+body.theme-dark .auth-card {
+  background: rgba(15, 23, 42, 0.98);
+  border-color: #1f2937;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* Текст/лейблы */
+body.theme-dark .form-label {
+  color: #e5e7eb;
+}
+
+body.theme-dark .auth-link-text,
+body.theme-dark .auth-info {
+  color: #9ca3af;
+}
+
+/* Инпуты */
+body.theme-dark .input {
+  background-color: #020617;
+  color: #e5e7eb;
+  border-color: #1f2937;
+}
+
+body.theme-dark .input::placeholder {
+  color: #64748b;
+}
+
+body.theme-dark .input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.55);
+}
+
+/* Селект (пункт выдачи) */
+body.theme-dark .select-button {
+  background: #020617;
+  border-color: #1f2937;
+  color: #e5e7eb;
+}
+
+body.theme-dark .select-placeholder {
+  color: #64748b;
+}
+
+body.theme-dark .select-dropdown {
+  background: #020617;
+  border-color: #1f2937;
+}
+
+body.theme-dark .select-option {
+  background: #020617;
+  color: #e5e7eb;
+}
+
+body.theme-dark .select-option:hover {
+  background: #111827;
+}
+
+/* Табы в шапке */
+body.theme-dark .tab-button {
+  color: #9ca3af;
+}
+
+body.theme-dark .tab-button--active {
+  background: #020617;
+  color: #c4b5fd;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+/* Кнопка "Забыли пароль" и ссылки */
+body.theme-dark .auth-link {
+  color: #9ca3af;
+}
+
+body.theme-dark .auth-link:hover {
+  color: #c4b5fd;
+}
+
+body.theme-dark .auth-link--accent {
+  color: #c4b5fd;
+}
+
+/* Ошибки/хелпер */
+body.theme-dark .helper-text {
+  color: #6b7280;
+}
+
+/* Футер */
+body.theme-dark .footer {
+  color: #6b7280;
+}

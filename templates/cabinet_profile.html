@@ -1,0 +1,149 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>kargoexpress281 — Профиль</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'css/cabinet-profile.css' %}" />
+</head>
+<body
+  class="theme-light"
+  data-default-theme="{% if site_settings and site_settings.default_dark_mode %}dark{% else %}light{% endif %}"
+  {% if site_settings %}
+    style="
+      {% if site_settings.bg_light %}
+        --bg-light: url('{{ site_settings.bg_light.url }}');
+      {% endif %}
+      {% if site_settings.bg_dark %}
+        --bg-dark: url('{{ site_settings.bg_dark.url }}');
+      {% endif %}
+    "
+  {% endif %}
+>
+  <div class="app">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header__logo">
+        {% if site_settings and site_settings.logo %}
+          <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="header__logo-img" />
+        {% else %}
+          <img src="{% static 'img/logo.png' %}" alt="LIDER CARGO" class="header__logo-img" />
+        {% endif %}
+      </div>
+
+      <!-- Переключатель темы -->
+      <button
+        type="button"
+        class="theme-toggle"
+        id="themeToggleBtn"
+        aria-label="Переключить тему"
+      >
+        🌙
+      </button>
+    </header>
+
+    <!-- MAIN -->
+    <main class="main">
+      <section class="page page--profile" id="page-profile">
+        <div class="layout">
+          <div class="card card--profile">
+            <h2 class="card__title">Профиль</h2>
+
+            <div class="profile-avatar">
+              <div class="profile-avatar__circle">
+                👤
+              </div>
+            </div>
+
+            <div class="profile-fields">
+              <div class="profile-field">
+                <p class="profile-field__label">ФИО</p>
+                <p class="profile-field__value" id="profile-fullname">
+                  {% if user_profile.full_name %}
+                    {{ user_profile.full_name }}
+                  {% else %}
+                    Не указано
+                  {% endif %}
+                </p>
+              </div>
+
+              <div class="profile-field">
+                <p class="profile-field__label">Телефон</p>
+                <p class="profile-field__value" id="profile-phone">
+                  {% if user_profile.phone %}
+                    {{ user_profile.phone }}
+                  {% else %}
+                    Не указано
+                  {% endif %}
+                </p>
+              </div>
+
+              <div class="profile-field">
+                <p class="profile-field__label">Пункт выдачи</p>
+                <p class="profile-field__value" id="profile-pickup">
+                  {% if user_profile.pickup_point %}
+                    {{ user_profile.pickup_point }}
+                  {% else %}
+                    Не выбран
+                  {% endif %}
+                </p>
+              </div>
+            </div>
+
+            <div class="profile-actions">
+              <a
+                href="{% url 'cabinet_edit_profile' %}"
+                class="btn btn--primary"
+              >
+                Редактировать профиль
+              </a>
+
+              <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--secondary">
+                  Выйти
+                </button>
+              </form>
+
+              <button
+                type="button"
+                class="btn btn--danger"
+                id="deleteProfileBtn"
+              >
+                Удалить профиль
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <a
+        href="{% url 'cabinet_home' %}"
+        class="bottom-nav__item"
+      >
+        <span class="bottom-nav__icon">🏠</span>
+        <span class="bottom-nav__label">Главное</span>
+      </a>
+      <a
+        href="{% url 'cabinet_profile' %}"
+        class="bottom-nav__item bottom-nav__item--active"
+      >
+        <span class="bottom-nav__icon">👤</span>
+        <span class="bottom-nav__label">Профиль</span>
+      </a>
+    </nav>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>&copy; 2025 LIDER CARGO. Все права защищены.</p>
+    </footer>
+  </div>
+
+  <script src="{% static 'js/cabinet-theme.js' %}"></script>
+  <script src="{% static 'js/cabinet-profile.js' %}"></script>
+</body>
+</html>

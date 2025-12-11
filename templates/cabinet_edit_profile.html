@@ -1,0 +1,198 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>kargoexpress281 — Редактировать профиль</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta>
+  <link rel="stylesheet" href="{% static 'css/cabinet-edit-profile.css' %}" />
+</head>
+<body
+  class="theme-light"
+  data-default-theme="{% if site_settings and site_settings.default_dark_mode %}dark{% else %}light{% endif %}"
+  {% if site_settings %}
+    style="
+      {% if site_settings.bg_light %}
+        --bg-light: url('{{ site_settings.bg_light.url }}');
+      {% endif %}
+      {% if site_settings.bg_dark %}
+        --bg-dark: url('{{ site_settings.bg_dark.url }}');
+      {% endif %}
+    "
+  {% endif %}
+>
+  <div class="app">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header__logo">
+        {% if site_settings and site_settings.logo %}
+          <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="header__logo-img" />
+        {% else %}
+          <img src="{% static 'img/logo.png' %}" alt="LIDER CARGO" class="header__logo-img" />
+        {% endif %}
+      </div>
+
+      <!-- Переключатель темы -->
+      <button
+        type="button"
+        class="theme-toggle"
+        id="themeToggleBtn"
+        aria-label="Переключить тему"
+      >
+        🌙
+      </button>
+    </header>
+
+    <!-- MAIN -->
+    <main class="main">
+      <section class="page page--edit-profile" id="page-editProfile">
+        <div class="layout">
+          <div class="card card--profile">
+            <div class="card__header">
+              <h2 class="card__title">Редактировать профиль</h2>
+              <a
+                href="{% url 'cabinet_profile' %}"
+                class="icon-button"
+              >
+                ✕
+              </a>
+            </div>
+
+            <form
+              id="editProfileForm"
+              class="space-y-4"
+              method="post"
+              action=""
+            >
+              {% csrf_token %}
+              <div class="profile-avatar">
+                <div class="profile-avatar__circle">
+                  👤
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="edit-fullname" class="form-label">ФИО</label>
+                <input
+                  id="edit-fullname"
+                  type="text"
+                  name="full_name"
+                  class="input"
+                  placeholder="Введите ваше ФИО"
+                  value="{{ form_data.full_name|default:user_profile.full_name|default_if_none:'' }}"
+                />
+                {% if errors.full_name %}
+                  <p class="helper-text" style="color:#dc2626;">{{ errors.full_name }}</p>
+                {% endif %}
+              </div>
+
+              <div class="form-group">
+                <label for="edit-phone" class="form-label">Номер телефона</label>
+                <div class="input-wrapper input-wrapper--phone">
+                  <span class="input-prefix">+996</span>
+                  <input
+                    id="edit-phone"
+                    type="tel"
+                    name="phone"
+                    class="input input--phone"
+                    placeholder="000 000 000"
+                    value="{% if form_data.phone %}{{ form_data.phone }}{% else %}{{ user_profile.phone|default_if_none:''|slice:'4:' }}{% endif %}"
+                  />
+                </div>
+                {% if errors.phone %}
+                  <p class="helper-text" style="color:#dc2626;">{{ errors.phone }}</p>
+                {% endif %}
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Пункт выдачи заказов</label>
+                <div class="select-wrapper">
+                  <button
+                    type="button"
+                    class="select-button"
+                    id="editPickupButton"
+                  >
+                    <span id="editPickupLabel" class="select-placeholder">
+                      {% if form_data.pickup_point %}
+                        {% for p in pickup_points %}
+                          {% if p.id|stringformat:"s" == form_data.pickup_point %}
+                            {{ p }}
+                          {% endif %}
+                        {% endfor %}
+                      {% elif user_profile.pickup_point %}
+                        {{ user_profile.pickup_point }}
+                      {% else %}
+                        Выберите пункт выдачи
+                      {% endif %}
+                    </span>
+                    <span class="select-arrow">⌄</span>
+                  </button>
+                  <div class="select-dropdown" id="editPickupDropdown">
+                    {% for p in pickup_points %}
+                      <button
+                        type="button"
+                        class="select-option"
+                        data-value="{{ p.id }}"
+                      >
+                        {{ p }}
+                      </button>
+                    {% endfor %}
+                  </div>
+                </div>
+                <input
+                  type="hidden"
+                  name="pickup_point"
+                  id="editPickupValue"
+                  value="{% if form_data.pickup_point %}{{ form_data.pickup_point }}{% elif user_profile.pickup_point %}{{ user_profile.pickup_point.id }}{% else %}{% endif %}"
+                />
+                {% if errors.pickup_point %}
+                  <p class="helper-text" style="color:#dc2626;">{{ errors.pickup_point }}</p>
+                {% endif %}
+              </div>
+
+              <div class="profile-actions">
+                <button type="submit" class="btn btn--primary">
+                  Сохранить изменения
+                </button>
+                <a
+                  href="{% url 'cabinet_profile' %}"
+                  class="btn btn--secondary"
+                >
+                  Отмена
+                </a>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- BOTTOM NAV -->
+    <nav class="bottom-nav">
+      <a
+        href="{% url 'cabinet_home' %}"
+        class="bottom-nav__item"
+      >
+        <span class="bottom-nav__icon">🏠</span>
+        <span class="bottom-nav__label">Главное</span>
+      </a>
+      <a
+        href="{% url 'cabinet_profile' %}"
+        class="bottom-nav__item bottom-nav__item--active"
+      >
+        <span class="bottom-nav__icon">👤</span>
+        <span class="bottom-nav__label">Профиль</span>
+      </a>
+    </nav>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>&copy; 2025 LIDER CARGO. Все права защищены.</p>
+    </footer>
+  </div>
+
+  <script src="{% static 'js/cabinet-theme.js' %}"></script>
+  <script src="{% static 'js/cabinet-edit-profile.js' %}"></script>
+</body>
+</html>

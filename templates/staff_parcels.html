@@ -1,0 +1,115 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>kargoexpress281 — Панель сотрудника</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{% static 'css/staff-parcels.css' %}" />
+</head>
+<body>
+  <div class="app app--staff">
+    <!-- HEADER -->
+    <header class="header header--staff">
+      <div class="header__logo">
+        <img src="{% static 'img/logo.png' %}" alt="LIDER CARGO" class="header__logo-img" />
+      </div>
+      <div class="header__right">
+        <span class="header__role-badge">Сотрудник</span>
+        <a href="{% url 'logout' %}" class="header__logout">Выйти</a>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="main main--staff">
+      <div class="layout layout--staff">
+        <!-- Форма добавления трека -->
+        <div class="card card--center">
+          <h1 class="card__title">Добавить трек-номер</h1>
+          <p class="card__subtitle">
+            Сканируйте или введите трек-номер посылки. Первый скан запускает цепочку из Китая,
+            последующие сканы — локальную цепочку до пункта выдачи.
+          </p>
+
+          {% if error_message %}
+            <div class="alert alert--error">
+              {{ error_message }}
+            </div>
+          {% endif %}
+          {% if success_message %}
+            <div class="alert alert--success">
+              {{ success_message }}
+            </div>
+          {% endif %}
+
+          <form
+            id="staffParcelForm"
+            class="staff-form"
+            method="post"
+            action="{% url 'staff_parcels' %}"
+          >
+            {% csrf_token %}
+            <div class="input-wrapper">
+              <input
+                id="staffTrackInput"
+                name="track_number"
+                type="text"
+                class="input input--staff"
+                maxlength="20"
+                autocomplete="off"
+                placeholder="Трек-номер"
+                required
+              />
+            </div>
+
+            <button type="submit" class="btn btn--primary">
+              Добавить
+            </button>
+
+            <p class="helper-text">
+              Длина трек-номера 1–20 символов, без пробелов.
+            </p>
+          </form>
+        </div>
+
+        <!-- Последние посылки -->
+        <div class="card card--fullwidth card--recent">
+          <div class="card__header">
+            <h2 class="card__title">Последние посылки</h2>
+            <p class="card__subtitle card__subtitle--light">
+              Показаны последние 30 операций.
+            </p>
+          </div>
+
+          {% if recent_parcels %}
+            <div class="recent-list">
+              {% for parcel in recent_parcels %}
+                <div class="recent-item">
+                  <div class="recent-item__left">
+                    <p class="recent-item__number">
+                      {{ parcel.track_number }}
+                    </p>
+                    <p class="recent-item__status">
+                      {{ parcel.get_status_display }}
+                    </p>
+                  </div>
+                  <p class="recent-item__time">
+                    {{ parcel.created_at|date:"Y-m-d H:i" }}
+                  </p>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="empty-state">
+              <div class="empty-state__icon">📦</div>
+              <p>Пока нет отсканированных посылок.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="{% static 'js/staff-parcels.js' %}"></script>
+</body>
+</html>
