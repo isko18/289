@@ -108,9 +108,11 @@ def register_view(request):
     # профиль без пункта выдачи (pickup_point=None)
     CabinetProfile.objects.create(
         user=user,
+        full_name=full_name,   # <<< ВАЖНО
         phone=phone,
         is_employee=False,
     )
+
 
     # автологин
     login(request, user)
@@ -268,6 +270,7 @@ def cabinet_profile_edit(request):
     profile, _ = CabinetProfile.objects.get_or_create(
         user=request.user,
         defaults={
+            "full_name": request.user.first_name or "",
             "phone": request.user.username,
             "is_employee": False,
         },
@@ -333,7 +336,8 @@ def cabinet_profile_edit(request):
     request.user.first_name = full_name
     request.user.username = phone
     request.user.save()
-
+    
+    profile.full_name = full_name     
     profile.phone = phone
     profile.pickup_point = pickup_point_obj
     profile.save()
