@@ -76,6 +76,18 @@ document.addEventListener("DOMContentLoaded", () => {
       .replaceAll("'", "&#039;");
   }
 
+  // переносим "Номер телефона ..." на новую строку
+  function formatAutoMessage(msg) {
+    const s = String(msg || "");
+    // любые пробелы перед "Номер телефона" -> перенос строки
+    return s.replace(/\s+Номер телефона\s*/i, "\nНомер телефона ");
+  }
+
+  function htmlWithLineBreaks(text) {
+    // безопасно: сначала экранируем, потом \n -> <br>
+    return escapeHtml(text).replaceAll("\n", "<br>");
+  }
+
   // ====== ДИНАМИЧЕСКИЕ ПОЛЯ ДЛЯ ТРЕКОВ (до 5 штук) ======
   function attachDynamicInputs() {
     if (!trackAddInputsContainer) return;
@@ -255,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tn = data.track_number || trackNumber || "";
 
         historyModalTitle.textContent =
-          "История отслеживания" + (tn ? ` — ${escapeHtml(tn)}` : "");
+          "История отслеживания" + (tn ? ` — ${tn}` : "");
 
         if (!events.length) {
           historyTimeline.innerHTML = `
@@ -268,16 +280,16 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
-        // ✅ ВАЖНО: показываем ТОЛЬКО авто-статус (message),
-        // а status_display используем только как fallback.
         historyTimeline.innerHTML = events
           .map((e) => {
             const dotClass = e.is_latest
               ? "timeline-item__dot timeline-item__dot--active"
               : "timeline-item__dot";
 
-            const title =
+            const rawTitle =
               (e.message || "").trim() || (e.status_display || "").trim();
+
+            const title = formatAutoMessage(rawTitle);
 
             const titleClass = e.is_latest
               ? "timeline-item__status timeline-item__status--active"
@@ -287,10 +299,8 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="timeline-item">
                 <div class="${dotClass}"></div>
                 <div class="timeline-item__content">
-                  <p class="${titleClass}">${escapeHtml(title)}</p>
-                  <p class="timeline-item__date">${escapeHtml(
-                    e.datetime || ""
-                  )}</p>
+                  <p class="${titleClass}">${htmlWithLineBreaks(title)}</p>
+                  <p class="timeline-item__date">${escapeHtml(e.datetime || "")}</p>
                 </div>
               </div>
             `;
@@ -313,7 +323,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ====== Делегирование кликов (закрытие модалок + клик по трекам) ======
   document.addEventListener("click", (e) => {
-    // закрытие модалок по кнопке
     const closeBtn = e.target.closest("[data-modal-close]");
     if (closeBtn) {
       const id = closeBtn.getAttribute("data-modal-close");
@@ -322,21 +331,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // клик по backdrop
     if (e.target.classList.contains("modal__backdrop")) {
       const modal = e.target.closest(".modal");
       if (modal) closeModal(modal);
       return;
     }
 
-    // клик по карточке посылки (и в списке, и в модалке по статусу)
     const trackItem = e.target.closest(".track-item");
     if (trackItem && trackItem.dataset.historyUrl) {
       const url = trackItem.dataset.historyUrl;
-      const trackNumber =
+      const tn =
         trackItem.querySelector(".track-item__number")?.textContent?.trim() ||
         "";
-      loadParcelHistory(url, trackNumber);
+      loadParcelHistory(url, tn);
     }
   });
 
