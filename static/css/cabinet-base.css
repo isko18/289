@@ -829,33 +829,19 @@ body.theme-dark .profile-field__label {
 
 /* Светлая тема (по умолчанию) */
 body.theme-light {
-  color: var(--foreground);
-
-  background-image:
-    var(--bg-light),
+  background: var(--bg-light, 
     radial-gradient(circle at top left, var(--background-gradient-from), transparent 50%),
     radial-gradient(circle at bottom right, var(--background-gradient-to), transparent 50%),
-    linear-gradient(var(--background-gradient-via), var(--background-gradient-via));
-
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  background-position: center top, center, center, center;
-  background-size: contain, cover, cover, cover;
-
-  background-attachment: scroll, scroll, scroll, scroll; /* если хочешь fixed — поменяй */
+    var(--background-gradient-via)
+  );
+  color: var(--foreground);
+  
 }
 
 /* Тёмная тема */
 body.theme-dark {
+  background: var(--bg-dark, #05070b);
   color: #f9fafb;
-
-  background-image:
-    var(--bg-dark),
-    linear-gradient(#05070b, #05070b);
-
-  background-repeat: no-repeat, no-repeat;
-  background-position: center top, center;
-  background-size: contain, cover, cover, cover;
-
 }
 
 /* тёмные карточки / элементы */
