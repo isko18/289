@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (statusCode >= 1) {
       history.push({
         date: "2025-08-19",
-        status: "Товар поступил на склад в Китае [LIDER CARGO]",
+        status: "Товар поступил на склад в Китае [kargoexpress]",
         isActive: statusCode === 1,
       });
     }

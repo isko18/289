@@ -10,7 +10,7 @@ class SiteSettings(models.Model):
     title = models.CharField(
         "Название проекта",
         max_length=100,
-        default="LIDER CARGO",
+        default="kargoexpress",
     )
 
     logo = models.ImageField(
