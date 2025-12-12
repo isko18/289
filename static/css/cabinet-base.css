@@ -835,12 +835,18 @@ body.theme-light {
     var(--background-gradient-via)
   );
   color: var(--foreground);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position: center top, center, center, center;
+  background-size: cover, cover, cover, cover;
 }
 
 /* Тёмная тема */
 body.theme-dark {
   background: var(--bg-dark, #05070b);
   color: #f9fafb;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position: center top, center, center, center;
+  background-size: cover, cover, cover, cover;
 }
 
 /* тёмные карточки / элементы */
