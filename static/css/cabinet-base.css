@@ -839,7 +839,8 @@ body.theme-light {
 
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
   background-position: center top, center, center, center;
-  background-size: cover, cover, cover, cover;
+  background-size: contain, cover, cover, cover;
+
   background-attachment: scroll, scroll, scroll, scroll; /* если хочешь fixed — поменяй */
 }
 
@@ -853,7 +854,8 @@ body.theme-dark {
 
   background-repeat: no-repeat, no-repeat;
   background-position: center top, center;
-  background-size: cover, cover;
+  background-size: contain, cover, cover, cover;
+
 }
 
 /* тёмные карточки / элементы */
