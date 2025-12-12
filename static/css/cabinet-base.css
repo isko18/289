@@ -6,8 +6,8 @@
   --background-gradient-to: #ffe6f0;
   --foreground: #111111;
 
-  --primary: #5b21b6;
-  --primary-light: #ec4899;
+  --primary: #2563eb;  
+  --primary-light: #38bdf8;
 
   --card-bg: #ffffff;
   --card-border: rgba(0, 0, 0, 0.06);
@@ -77,14 +77,33 @@ body {
   padding: 1rem 1.5rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  position: relative; /* важно */
+}
+
+/* контейнер лого (если есть) */
+.header__logo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .header__logo-img {
-  height: 40px;
+  height: 90px; /* увеличил */
+  width: auto;
   display: block;
+      margin-top: 40px;
 }
 
+/* чтобы кнопка темы не мешала */
+.theme-toggle {
+  margin-left: auto;
+  position: relative;
+  z-index: 2;
+}
 /* MAIN */
 
 .main {
