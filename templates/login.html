@@ -24,13 +24,13 @@
   <div class="page">
     <!-- Header -->
     <header class="header">
-      <div class="header__logo">
+      {% comment %} <div class="header__logo">
         {% if site_settings and site_settings.logo %}
           <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="header__logo-img" />
         {% else %}
           <img src="{% static 'img/logo.png' %}" alt="kargoexpress281" class="header__logo-img" />
         {% endif %}
-      </div>
+      </div> {% endcomment %}
       <div class="header__tabs">
         <button class="tab-button tab-button--active" type="button">
           Вход
