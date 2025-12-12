@@ -72,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (statusCode >= 1) {
       history.push({
         date: "2025-08-19",
-        status: "Товар поступил на склад в Китае [kargoexpress]",
+        status: "Товар поступил на склад в Китае",
         isActive: statusCode === 1,
       });
     }
@@ -104,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       history.push({
         date: "2025-08-28",
         status:
-          "Товар прибыл в пункт выдачи Ош ER-010, трек-номер: 45847548365495, адрес: г. Бишкек, ул. Павлова, 13/4",
+          "Товар прибыл в пункт выдачи, трек-номер: 45847548365495, адрес: г. Бишкек, ул. Павлова, 13/4",
         isActive: true,
       });
     }
