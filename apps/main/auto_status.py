@@ -88,7 +88,7 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
 
     # этап 1: прибыл в Бишкек/город
     if parcel.local_flow_stage < 1 and dt >= timedelta(seconds=0):
-        msg_city = f"Товар прибыл в [{city}]." if city else "Товар прибыл на территорию Кыргызстана."
+        msg_city = f"Товар прибыл в Бишкек." if city else "Товар прибыл на территорию Кыргызстана."
         ParcelHistory.objects.create(
             parcel=parcel,
             status=Parcel.Status.FROM_CN,
