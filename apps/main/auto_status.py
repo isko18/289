@@ -1,23 +1,18 @@
 from datetime import timedelta
-
+from django.conf import settings
 from django.utils import timezone
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
-from django.contrib import messages
 
-from .models import Parcel, ParcelHistory, CabinetProfile
+from .models import Parcel, ParcelHistory
+
+
+def _get_second_scan_delay() -> timedelta:
+    hours = getattr(settings, "STAFF_SECOND_SCAN_DELAY_HOURS", 48)
+    return timedelta(hours=float(hours))
 
 
 def _advance_cn_flow(parcel: Parcel) -> None:
     """
-    Обновляет историю и parcel.status в зависимости от того,
-    сколько времени прошло с первого скана (auto_flow_started_at).
-
-    Этапы:
-    0 -> (сразу)   "Товар поступил на склад в Китае [LIDER CARGO]"
-    1 -> (+10 сек) "Товар отправлен на хранение"
-    2 -> (+2 дня)  "Товар отправлен со склада и уже в пути"
-    3 -> (+4 дня)  "По пути в Кашгар"
+    Китайская авто-цепочка от auto_flow_started_at.
     """
     if not parcel.auto_flow_started_at:
         return
@@ -28,8 +23,6 @@ def _advance_cn_flow(parcel: Parcel) -> None:
 
     changed = False
 
-    # этап 0 → 1 (самый первый статус уже создаётся при первом скане,
-    # но на всякий подстрахуемся)
     if parcel.auto_flow_stage < 1 and seconds >= 0:
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -40,7 +33,6 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         parcel.auto_flow_stage = 1
         changed = True
 
-    # этап 1 → 2 (через 10 секунд)
     if parcel.auto_flow_stage < 2 and seconds >= 10:
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -50,7 +42,6 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         parcel.auto_flow_stage = 2
         changed = True
 
-    # этап 2 → 3 (через 2 дня)
     if parcel.auto_flow_stage < 3 and dt >= timedelta(days=2):
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -61,7 +52,6 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         parcel.auto_flow_stage = 3
         changed = True
 
-    # этап 3 → 4 (через 4 дня)
     if parcel.auto_flow_stage < 4 and dt >= timedelta(days=4):
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -75,15 +65,11 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         parcel.save(update_fields=["status", "auto_flow_stage", "updated_at"])
 
 
-
 def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
     """
-    Локальная цепочка после второго скана (в Киргизии / пункт выдачи).
-    Этапы считаем от local_flow_started_at:
-
-    0 -> (сразу)   "Товар прибыл в [Бишкек]" (или город из пункта)
-    1 -> (+2 часа) "Классификация и обработка."
-    2 -> (+2 часа) "Товар прибыл в пункт выдачи <имя>, адрес: ..."
+    Локальная авто-цепочка.
+    ВАЖНО: "прибыл в пункт выдачи" (AT_PICKUP) НЕ СТАВИМ автоматически.
+    Её ставит ТОЛЬКО 2-й скан.
     """
     if not parcel.local_flow_started_at:
         return
@@ -92,10 +78,7 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
     dt = now - parcel.local_flow_started_at
 
     city = ""
-    address = ""
     if pickup_point:
-        address = pickup_point.address or ""
-        # очень грубо вытаскиваем город: до первой запятой
         if pickup_point.address and "," in pickup_point.address:
             city = pickup_point.address.split(",")[0].strip()
         else:
@@ -103,6 +86,7 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
 
     changed = False
 
+    # этап 1: прибыл в Бишкек/город
     if parcel.local_flow_stage < 1 and dt >= timedelta(seconds=0):
         msg_city = f"Товар прибыл в [{city}]." if city else "Товар прибыл на территорию Кыргызстана."
         ParcelHistory.objects.create(
@@ -113,6 +97,7 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
         parcel.local_flow_stage = 1
         changed = True
 
+    # этап 2: классификация
     if parcel.local_flow_stage < 2 and dt >= timedelta(hours=2):
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -122,34 +107,17 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
         parcel.local_flow_stage = 2
         changed = True
 
-    if parcel.local_flow_stage < 3 and dt >= timedelta(hours=4):
-        msg_pickup = "Товар прибыл в пункт выдачи"
-        if pickup_point:
-            msg_pickup += f" {pickup_point.name}"
-            if address:
-                msg_pickup += f", адрес: {address}"
-        msg_pickup += "."
-        ParcelHistory.objects.create(
-            parcel=parcel,
-            status=Parcel.Status.AT_PICKUP,
-            message=msg_pickup,
-        )
-        parcel.status = Parcel.Status.AT_PICKUP
-        parcel.local_flow_stage = 3
-        changed = True
+    # ❌ этап "прибыл в пункт выдачи" тут УБРАН
+    # Его делает второй скан.
 
     if changed:
         parcel.save(update_fields=["status", "local_flow_stage", "updated_at"])
 
+
 def _process_staff_scan(user, track_number: str) -> str:
     """
-    Обрабатывает скан:
-
-    - если это ПЕРВЫЙ скан (нет auto_flow_started_at) —
-      считаем, что товар поступил на склад в Китае, запускаем китайскую цепочку;
-
-    - если китайская цепочка уже была (есть auto_flow_started_at) —
-      запускаем/обновляем локальную цепочку (Кыргызстан / пункт выдачи).
+    1-й скан: фиксируем Китай и запускаем авто-Китай.
+    2-й скан (только через delay): ставим "прибыл в пункт выдачи" (AT_PICKUP).
     """
     now = timezone.now()
     track = (track_number or "").strip().replace(" ", "")[:20]
@@ -157,15 +125,12 @@ def _process_staff_scan(user, track_number: str) -> str:
     profile = getattr(user, "cabinet_profile", None)
     pickup = getattr(profile, "pickup_point", None)
 
-    # посылка может уже существовать (клиент добавил трек в кабинете)
     parcel, _ = Parcel.objects.get_or_create(
         track_number=track,
-        defaults={
-            "status": Parcel.Status.WAITING_CN,
-        },
+        defaults={"status": Parcel.Status.WAITING_CN},
     )
 
-    # ---------- ПЕРВЫЙ СКАН: Китай ----------
+    # ===== 1 СКАН =====
     if parcel.auto_flow_started_at is None:
         parcel.auto_flow_started_at = now
         parcel.auto_flow_stage = 1
@@ -177,23 +142,51 @@ def _process_staff_scan(user, track_number: str) -> str:
             status=Parcel.Status.AT_CN,
             message="Товар поступил на склад в Китае [LIDER CARGO]",
         )
-        # сразу дотянем остальные этапы Китая по времени (вдруг скан был задним числом)
-        _advance_cn_flow(parcel)
-        return "Товар зафиксирован на складе в Китае."
 
-    # ---------- ВТОРОЙ И ПОСЛЕДУЮЩИЕ СКАНЫ ----------
-    # сначала дотягиваем китайскую цепочку по времени
+        # подтянуть авто-китай (на всякий)
+        _advance_cn_flow(parcel)
+        return "1 скан: Товар зафиксирован на складе в Китае."
+
+    # ===== 2 СКАН: ТОЛЬКО ПОСЛЕ DELAY =====
+    delay = _get_second_scan_delay()
+    allowed_at = parcel.auto_flow_started_at + delay
+    if now < allowed_at:
+        left = allowed_at - now
+        h = int(left.total_seconds() // 3600)
+        m = int((left.total_seconds() % 3600) // 60)
+        raise ValueError(f"2 скан будет доступен через {h}ч {m}м.")
+
+    # если уже в пункте выдачи — не дублируем
+    if parcel.status == Parcel.Status.AT_PICKUP:
+        return "2 скан уже был: посылка уже в пункте выдачи."
+
+    # сначала обновим авто-статусы до текущего времени
     _advance_cn_flow(parcel)
 
-    # если локальная цепочка ещё не запускалась — запускаем
+    # локалку начинаем/обновляем (чтобы были 'Бишкек' и 'Классификация' до 2 скана)
     if parcel.local_flow_started_at is None:
         parcel.local_flow_started_at = now
         parcel.local_flow_stage = 0
         parcel.save(update_fields=["local_flow_started_at", "local_flow_stage", "updated_at"])
 
-        _advance_local_flow(parcel, pickup)
-        return "Товар зафиксирован на локальном складе, запущена цепочка до пункта выдачи."
-
-    # локальная уже есть — просто обновляем по текущему времени
     _advance_local_flow(parcel, pickup)
-    return "Статус посылки обновлён по текущему времени."
+
+    # ===== ВОТ ОН: 2 СКАН СТАВИТ ПУНКТ ВЫДАЧИ =====
+    msg = "Товар прибыл в пункт выдачи"
+    if pickup:
+        msg += f" {pickup.name}"
+        if pickup.address:
+            msg += f", адрес: {pickup.address}"
+    msg += "."
+
+    ParcelHistory.objects.create(
+        parcel=parcel,
+        status=Parcel.Status.AT_PICKUP,
+        message=msg,
+    )
+
+    parcel.status = Parcel.Status.AT_PICKUP
+    parcel.local_flow_stage = max(parcel.local_flow_stage or 0, 3)
+    parcel.save(update_fields=["status", "local_flow_stage", "updated_at"])
+
+    return "2 скан: Товар прибыл в пункт выдачи."

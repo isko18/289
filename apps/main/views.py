@@ -351,39 +351,32 @@ def cabinet_profile_edit(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def staff_parcels_view(request):
-    """
-    Панель сотрудника:
-    - один инпут под сканер / ввод трека;
-    - первый скан запускает китайскую цепочку;
-    - последующие сканы включают/обновляют локальную цепочку.
-    """
     profile = getattr(request.user, "cabinet_profile", None)
     if not profile or not profile.is_employee:
-        # не сотрудник — в обычный кабинет
         return redirect("cabinet_home")
 
     error_message = ""
     success_message = ""
 
     if request.method == "POST":
-        raw = request.POST.get("track_number", "")
-        track = (raw or "").strip().replace(" ", "")
+        track = (request.POST.get("track_number", "") or "").strip().replace(" ", "")
 
         if not track:
             error_message = "Укажите трек-номер."
         else:
-            msg = _process_staff_scan(request.user, track)
-            success_message = msg
+            try:
+                success_message = _process_staff_scan(request.user, track)
+            except ValueError as e:
+                error_message = str(e)
+            except Exception:
+                error_message = "Ошибка обработки трек-номера."
 
-    # последние 30 посылок (по created_at)
     recent_parcels = Parcel.objects.order_by("-created_at")[:30]
-
-    context = {
+    return render(request, "staff_parcels.html", {
         "error_message": error_message,
         "success_message": success_message,
         "recent_parcels": recent_parcels,
-    }
-    return render(request, "staff_parcels.html", context)
+    })
 
 
 # ================== ИСТОРИЯ КОНКРЕТНОЙ ПОСЫЛКИ (JSON) ==================

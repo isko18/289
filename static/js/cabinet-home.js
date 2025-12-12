@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const trackSearchForm = document.getElementById("trackSearchForm");
   const trackSearchInput = document.getElementById("trackSearchInput");
-  const trackSearchError = document.getElementById("trackSearchError"); // (если есть в HTML)
+  const trackSearchError = document.getElementById("trackSearchError"); // если есть в HTML
 
   // ====== UTILS ======
   function openModal(modalEl) {
@@ -271,12 +271,17 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
 
+        // ✅ ВАЖНО: показываем ТОЛЬКО авто-статус (message),
+        // а status_display используем только как fallback.
         historyTimeline.innerHTML = events
           .map((e) => {
             const dotClass = e.is_latest
               ? "timeline-item__dot timeline-item__dot--active"
               : "timeline-item__dot";
-            const statusClass = e.is_latest
+
+            const title = (e.message || "").trim() || (e.status_display || "").trim();
+
+            const titleClass = e.is_latest
               ? "timeline-item__status timeline-item__status--active"
               : "timeline-item__status";
 
@@ -284,19 +289,8 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="timeline-item">
                 <div class="${dotClass}"></div>
                 <div class="timeline-item__content">
-                  <p class="${statusClass}">${escapeHtml(
-                    e.status_display || ""
-                  )}</p>
-                  ${
-                    e.message
-                      ? `<p class="timeline-item__message">${escapeHtml(
-                          e.message
-                        )}</p>`
-                      : ""
-                  }
-                  <p class="timeline-item__date">${escapeHtml(
-                    e.datetime || ""
-                  )}</p>
+                  <p class="${titleClass}">${escapeHtml(title)}</p>
+                  <p class="timeline-item__date">${escapeHtml(e.datetime || "")}</p>
                 </div>
               </div>
             `;
@@ -335,13 +329,12 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // клик по карточке посылки
+    // клик по карточке посылки (и в списке, и в модалке по статусу)
     const trackItem = e.target.closest(".track-item");
     if (trackItem && trackItem.dataset.historyUrl) {
       const url = trackItem.dataset.historyUrl;
       const trackNumber =
-        trackItem.querySelector(".track-item__number")?.textContent?.trim() ||
-        "";
+        trackItem.querySelector(".track-item__number")?.textContent?.trim() || "";
       loadParcelHistory(url, trackNumber);
     }
   });
@@ -359,7 +352,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!track) return;
 
       try {
-        // публичный lookup по треку
         const res = await fetch(
           `/cabinet/api/track/public/?track=${encodeURIComponent(track)}`,
           {
