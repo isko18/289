@@ -27,7 +27,7 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         ParcelHistory.objects.create(
             parcel=parcel,
             status=Parcel.Status.AT_CN,
-            message="Товар поступил на склад в Китае [LIDER CARGO]",
+            message="Товар поступил на склад в Китае [kargoexpress]",
         )
         parcel.status = Parcel.Status.AT_CN
         parcel.auto_flow_stage = 1
@@ -140,7 +140,7 @@ def _process_staff_scan(user, track_number: str) -> str:
         ParcelHistory.objects.create(
             parcel=parcel,
             status=Parcel.Status.AT_CN,
-            message="Товар поступил на склад в Китае [LIDER CARGO]",
+            message="Товар поступил на склад в Китае [kargoexpress]",
         )
 
         # подтянуть авто-китай (на всякий)
