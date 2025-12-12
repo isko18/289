@@ -766,7 +766,10 @@ body.theme-dark .profile-field__label {
 .timeline-item__status--active {
   color: #b91c1c;
 }
-
+.timeline-item__status,
+.timeline-item__message {
+  white-space: pre-line;
+}
 .timeline-item__message {
   margin: 0.15rem 0 0.1rem;
   font-size: 0.85rem;
