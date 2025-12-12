@@ -56,6 +56,7 @@ class SiteSettings(models.Model):
 class PickupPoint(models.Model):
     name = models.CharField("Название", max_length=255)
     address = models.CharField("Адрес", max_length=255, blank=True)
+    phone = models.CharField(max_length=255, verbose_name="Номер телефона", blank=True, null=True)
     is_active = models.BooleanField("Активен", default=True)
 
     class Meta:
