@@ -178,7 +178,7 @@ def _process_staff_scan(user, track_number: str) -> str:
         if pickup.address:
             msg += f", адрес: {pickup.address}"
         if pickup:
-            msg += f"Номер телефона {pickup.phone}"
+            msg += f", Номер телефона {pickup.phone}"
     msg += "."
 
     ParcelHistory.objects.create(
