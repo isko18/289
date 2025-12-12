@@ -78,9 +78,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // переносим "Номер телефона ..." на новую строку
   function formatAutoMessage(msg) {
-    const s = String(msg || "");
-    // любые пробелы перед "Номер телефона" -> перенос строки
-    return s.replace(/\s+Номер телефона:\s*/i, "\nНомер телефона: ");
+    let s = String(msg || "");
+
+    // 1) переносим "Номер телефона ..." на новую строку (любой вариант)
+    s = s.replace(/\s+Номер телефона\s*(?::\s*)?/i, "\nНомер телефона: ");
+
+    // 2) на всякий: если где-то осталось "телефона :"
+    s = s.replace(/Номер телефона\s*:\s*/gi, "Номер телефона: ");
+
+    return s.trim();
   }
 
   function htmlWithLineBreaks(text) {
