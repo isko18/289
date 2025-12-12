@@ -20,6 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const trackSearchForm = document.getElementById("trackSearchForm");
   const trackSearchInput = document.getElementById("trackSearchInput");
+  const trackSearchError = document.getElementById("trackSearchError"); // (если есть в HTML)
 
   // ====== UTILS ======
   function openModal(modalEl) {
@@ -32,6 +33,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!modalEl) return;
     modalEl.classList.add("hidden");
     document.body.style.overflow = "";
+  }
+
+  function setSearchMsg(text) {
+    if (!trackSearchError) return;
+    if (!text) {
+      trackSearchError.style.display = "none";
+      trackSearchError.textContent = "";
+      return;
+    }
+    trackSearchError.style.display = "block";
+    trackSearchError.textContent = text;
+  }
+
+  function cleanTrack(v) {
+    return (v || "").trim().replace(/\s+/g, "").slice(0, 20);
   }
 
   function statusLabel(status) {
@@ -51,6 +67,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   // ====== ДИНАМИЧЕСКИЕ ПОЛЯ ДЛЯ ТРЕКОВ (до 5 штук) ======
   function attachDynamicInputs() {
     if (!trackAddInputsContainer) return;
@@ -62,9 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const inputs = Array.from(
         trackAddInputsContainer.querySelectorAll("input[name='tracks']")
       );
-      const hasValue = inputs.some(
-        (inp) => inp.value.trim().length > 0
-      );
+      const hasValue = inputs.some((inp) => inp.value.trim().length > 0);
       trackResetBtn.style.display = hasValue ? "inline-block" : "none";
     }
 
@@ -104,9 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const firstInput = trackAddInputsContainer.querySelector(
       "input[name='tracks']"
     );
-    if (firstInput) {
-      firstInput.addEventListener("input", onInputChange);
-    }
+    if (firstInput) firstInput.addEventListener("input", onInputChange);
 
     // обработчик кнопки сброса
     if (trackResetBtn) {
@@ -125,13 +146,9 @@ document.addEventListener("DOMContentLoaded", () => {
         input.addEventListener("input", onInputChange);
         trackAddInputsContainer.appendChild(input);
 
-        // прячем кнопку
         trackResetBtn.style.display = "none";
       });
-    }
 
-    // на всякий при первой инициализации
-    if (trackResetBtn) {
       trackResetBtn.style.display = "none";
     }
   }
@@ -190,8 +207,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         row.innerHTML = `
           <div class="track-item__main">
-            <p class="track-item__number">${trackNumber}</p>
-            <p class="track-item__status">${statusText}</p>
+            <p class="track-item__number">${escapeHtml(trackNumber)}</p>
+            <p class="track-item__status">${escapeHtml(statusText)}</p>
           </div>
         `;
 
@@ -230,11 +247,10 @@ document.addEventListener("DOMContentLoaded", () => {
         "X-Requested-With": "XMLHttpRequest",
         Accept: "application/json",
       },
+      credentials: "same-origin",
     })
       .then((res) => {
-        if (!res.ok) {
-          throw new Error("Ошибка загрузки");
-        }
+        if (!res.ok) throw new Error("Ошибка загрузки");
         return res.json();
       })
       .then((data) => {
@@ -242,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const tn = data.track_number || trackNumber || "";
 
         historyModalTitle.textContent =
-          "История отслеживания" + (tn ? ` — ${tn}` : "");
+          "История отслеживания" + (tn ? ` — ${escapeHtml(tn)}` : "");
 
         if (!events.length) {
           historyTimeline.innerHTML = `
@@ -267,13 +283,21 @@ document.addEventListener("DOMContentLoaded", () => {
             return `
               <div class="timeline-item">
                 <div class="${dotClass}"></div>
-                <p class="${statusClass}">${e.status_display}</p>
-                ${
-                  e.message
-                    ? `<p class="timeline-item__message">${e.message}</p>`
-                    : ""
-                }
-                <p class="timeline-item__date">${e.datetime}</p>
+                <div class="timeline-item__content">
+                  <p class="${statusClass}">${escapeHtml(
+                    e.status_display || ""
+                  )}</p>
+                  ${
+                    e.message
+                      ? `<p class="timeline-item__message">${escapeHtml(
+                          e.message
+                        )}</p>`
+                      : ""
+                  }
+                  <p class="timeline-item__date">${escapeHtml(
+                    e.datetime || ""
+                  )}</p>
+                </div>
               </div>
             `;
           })
@@ -293,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // делегирование кликов по модалкам и карточкам
+  // ====== Делегирование кликов (закрытие модалок + клик по трекам) ======
   document.addEventListener("click", (e) => {
     // закрытие модалок по кнопке
     const closeBtn = e.target.closest("[data-modal-close]");
@@ -322,31 +346,49 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // ====== ПОИСК ПО ТРЕК-НОМЕРУ ======
-  if (trackSearchForm && trackSearchInput && trackListWrapper) {
-    trackSearchForm.addEventListener("submit", (e) => {
+  // ====== ПОИСК "ОТСЛЕДИТЬ ТОВАР" (любой трек, даже чужой) ======
+  if (trackSearchForm && trackSearchInput) {
+    trackSearchInput.addEventListener("input", () => setSearchMsg(""));
+
+    trackSearchForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const needle = trackSearchInput.value.trim();
-      if (!needle) return;
 
-      const items = Array.from(
-        trackListWrapper.querySelectorAll(".track-item")
-      );
-      const match = items.find((el) => {
-        const num = el
-          .querySelector(".track-item__number")
-          ?.textContent?.trim();
-        return num && num.includes(needle);
-      });
+      const track = cleanTrack(trackSearchInput.value);
+      trackSearchInput.value = track;
 
-      if (match && match.dataset.historyUrl) {
-        const url = match.dataset.historyUrl;
-        const trackNumber =
-          match.querySelector(".track-item__number")?.textContent?.trim() ||
-          "";
-        loadParcelHistory(url, trackNumber);
-      } else {
-        alert("Посылка с таким трек-номером не найдена в ваших данных.");
+      if (!track) return;
+
+      try {
+        // публичный lookup по треку
+        const res = await fetch(
+          `/cabinet/api/track/public/?track=${encodeURIComponent(track)}`,
+          {
+            method: "GET",
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              Accept: "application/json",
+            },
+            credentials: "same-origin",
+          }
+        );
+
+        if (!res.ok) {
+          setSearchMsg("Трек не найден.");
+          return;
+        }
+
+        const lookup = await res.json();
+
+        if (!lookup || !lookup.ok || !lookup.history_url) {
+          setSearchMsg("Трек не найден.");
+          return;
+        }
+
+        setSearchMsg("");
+        loadParcelHistory(lookup.history_url, lookup.track_number || track);
+      } catch (err) {
+        console.error(err);
+        setSearchMsg("Трек не найден.");
       }
     });
   }
@@ -370,12 +412,8 @@ document.addEventListener("DOMContentLoaded", () => {
         el.classList.remove("track-item--hidden");
       });
 
-      const stillHidden = trackListWrapper.querySelector(
-        ".track-item--hidden"
-      );
-      if (!stillHidden) {
-        showMoreBtn.style.display = "none";
-      }
+      const stillHidden = trackListWrapper.querySelector(".track-item--hidden");
+      if (!stillHidden) showMoreBtn.style.display = "none";
     });
   }
 });

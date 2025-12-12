@@ -22,4 +22,6 @@ urlpatterns = [
         name="parcel_history",
     ),
     path("staff/parcels/", views.staff_parcels_view, name="staff_parcels"),
+    path("cabinet/api/track/public/", views.track_public_lookup_view, name="track_public_lookup"),
+    path("cabinet/api/parcels/<int:pk>/history-public/", views.parcel_history_public_view, name="parcel_history_public"),
 ]

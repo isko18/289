@@ -74,7 +74,7 @@ class CabinetProfile(models.Model):
         related_name="cabinet_profile",
     )
     full_name = models.CharField(max_length=255, verbose_name="ФИО")
-    phone = models.CharField("Телефон", max_length=32, blank=True)
+    phone = models.CharField("Телефон", max_length=32, blank=True, unique=True)
     pickup_point = models.ForeignKey(
         PickupPoint,
         on_delete=models.SET_NULL,

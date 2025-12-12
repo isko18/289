@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{% static 'css/cabinet-home.css' %}" />
 </head>
+
 <body
   class="theme-light"
   data-default-theme="{% if site_settings and site_settings.default_dark_mode %}dark{% else %}light{% endif %}"
@@ -26,9 +27,17 @@
     <header class="header">
       <div class="header__logo">
         {% if site_settings and site_settings.logo %}
-          <img src="{{ site_settings.logo.url }}" alt="{{ site_settings.title }}" class="header__logo-img" />
+          <img
+            src="{{ site_settings.logo.url }}"
+            alt="{{ site_settings.title }}"
+            class="header__logo-img"
+          />
         {% else %}
-          <img src="{% static 'img/logo.png' %}" alt="kargoexpress281" class="header__logo-img" />
+          <img
+            src="{% static 'img/logo.png' %}"
+            alt="kargoexpress281"
+            class="header__logo-img"
+          />
         {% endif %}
       </div>
 
@@ -47,9 +56,11 @@
     <main class="main">
       <section class="page page--home" id="page-home">
         <div class="layout">
+
           <!-- Отследить товар -->
           <div class="card">
             <h2 class="card__title">Отследить товар</h2>
+
             <form class="track-form" id="trackSearchForm">
               <div class="input-wrapper">
                 <input
@@ -57,20 +68,31 @@
                   type="text"
                   class="input"
                   placeholder="Введите трек-номер"
+                  maxlength="20"
+                  autocomplete="off"
                 />
                 <button type="submit" class="icon-button" title="Искать">
                   🔍
                 </button>
               </div>
-              <p class="helper-text text-center">
+
+              <p class="helper-text text-center" id="trackSearchHint">
                 Введите трек-номер для отслеживания вашей посылки
               </p>
+
+              <!-- сюда JS будет писать "Трек не найден" и т.д. -->
+              <p
+                class="helper-text text-center"
+                id="trackSearchError"
+                style="display:none;"
+              ></p>
             </form>
           </div>
 
           <!-- Добавить трек-номер -->
           <div class="card">
             <h2 class="card__title">Добавить трек-номер</h2>
+
             <form
               class="track-form"
               id="trackAddForm"
@@ -78,6 +100,7 @@
               action="{% url 'cabinet_home' %}"
             >
               {% csrf_token %}
+
               <div id="trackAddInputs">
                 <input
                   name="tracks"
@@ -101,6 +124,7 @@
               <button type="submit" class="btn btn--primary">
                 Добавить
               </button>
+
               <p class="helper-text text-center">
                 Можно добавить до 5 трек-номеров за один раз. Каждый трек — 1–20 символов.
               </p>
@@ -110,6 +134,7 @@
           <!-- Статусы -->
           <div class="card card--fullwidth">
             <h3 class="card__title">Статус доставки</h3>
+
             <div class="status-grid">
               <button
                 type="button"
@@ -129,7 +154,10 @@
                 class="status-card status-card--s2"
                 data-status="2"
               >
-                <span class="status-card__badge status-card__badge--right" id="status-count-2">
+                <span
+                  class="status-card__badge status-card__badge--right"
+                  id="status-count-2"
+                >
                   {{ status_count_2|default:"0" }}
                 </span>
                 <p class="status-card__label">
@@ -155,7 +183,10 @@
                 class="status-card status-card--s4"
                 data-status="4"
               >
-                <span class="status-card__badge status-card__badge--right" id="status-count-4">
+                <span
+                  class="status-card__badge status-card__badge--right"
+                  id="status-count-4"
+                >
                   {{ status_count_4|default:"0" }}
                 </span>
                 <p class="status-card__label">
@@ -168,6 +199,7 @@
           <!-- Мои посылки -->
           <div class="card card--fullwidth" id="trackListCard">
             <h3 class="card__title">Мои посылки</h3>
+
             <div class="track-list" id="trackListWrapper">
               {% if parcels %}
                 {% for parcel in parcels %}
@@ -210,6 +242,7 @@
               {% endif %}
             </div>
           </div>
+
         </div>
       </section>
     </main>
@@ -223,6 +256,7 @@
         <span class="bottom-nav__icon">🏠</span>
         <span class="bottom-nav__label">Главное</span>
       </a>
+
       <a
         href="{% url 'cabinet_profile' %}"
         class="bottom-nav__item"
@@ -235,6 +269,7 @@
     <!-- MODAL: список по статусу -->
     <div class="modal hidden" id="statusModal">
       <div class="modal__backdrop"></div>
+
       <div class="modal__content">
         <div class="modal__header">
           <h3 class="modal__title" id="statusModalTitle"></h3>
@@ -242,6 +277,7 @@
             ✕
           </button>
         </div>
+
         <div class="modal__body" id="statusModalBody">
           <!-- Заполняется из JS -->
         </div>
@@ -251,6 +287,7 @@
     <!-- MODAL: история трека -->
     <div class="modal hidden" id="historyModal">
       <div class="modal__backdrop"></div>
+
       <div class="modal__content">
         <div class="modal__header">
           <h3 class="modal__title" id="historyModalTitle">История отслеживания</h3>
@@ -258,6 +295,7 @@
             ✕
           </button>
         </div>
+
         <div class="modal__body">
           <div class="timeline" id="historyTimeline">
             <!-- История трека из JS -->

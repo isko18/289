@@ -457,3 +457,71 @@ def index_redirect(request):
             return redirect("staff_parcels")
         return redirect("cabinet_home")
     return redirect("login")
+
+
+@login_required
+@require_http_methods(["GET"])
+def track_public_lookup_view(request):
+    track = (request.GET.get("track") or "").strip().replace(" ", "")
+    if not track:
+        return JsonResponse({"ok": False, "error": "empty_track"}, status=400)
+
+    parcel = Parcel.objects.filter(track_number__iexact=track).first()
+    if not parcel:
+        return JsonResponse({"ok": False, "error": "not_found"}, status=404)
+
+    # ⚠️ ВАЖНО: авто-статусы НЕ зависимы от пункта выдачи клиента, поэтому pickup сюда не пихаем
+    # Иначе чужой пользователь будет влиять на локальный флоу.
+    _advance_cn_flow(parcel)
+    # локальный флоу можно включать ТОЛЬКО если у посылки есть owner и его pickup (или вообще не включать тут)
+    if parcel.user_id:
+        owner_profile = getattr(parcel.user, "cabinet_profile", None)
+        owner_pickup = getattr(owner_profile, "pickup_point", None)
+        _advance_local_flow(parcel, owner_pickup)
+
+    return JsonResponse({
+        "ok": True,
+        "track_number": parcel.track_number,
+        "status": parcel.status,
+        "status_label": parcel.get_status_display(),
+        "parcel_id": parcel.id,
+        "history_url": f"/cabinet/api/parcels/{parcel.id}/history-public/",
+    })
+    
+@login_required
+@require_http_methods(["GET"])
+def parcel_history_public_view(request, pk: int):
+    parcel = get_object_or_404(Parcel, pk=pk)
+
+    # авто-статусы обновляем безопасно
+    _advance_cn_flow(parcel)
+    if parcel.user_id:
+        owner_profile = getattr(parcel.user, "cabinet_profile", None)
+        owner_pickup = getattr(owner_profile, "pickup_point", None)
+        _advance_local_flow(parcel, owner_pickup)
+
+    events = []
+    qs = getattr(parcel, "history", None)
+
+    if qs is not None:
+        for idx, h in enumerate(qs.all().order_by("-created_at")):
+            events.append({
+                "status_display": h.get_status_display(),
+                "message": getattr(h, "message", "") or "",
+                "datetime": h.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_latest": idx == 0,
+            })
+
+    if not events:
+        created = parcel.created_at if hasattr(parcel, "created_at") else timezone.now()
+        events.append({
+            "status_display": parcel.get_status_display(),
+            "message": "",
+            "datetime": created.strftime("%Y-%m-%d %H:%M:%S"),
+            "is_latest": True,
+        })
+
+    return JsonResponse({
+        "track_number": parcel.track_number,
+        "events": events,
+    })
