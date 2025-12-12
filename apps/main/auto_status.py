@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 from django.conf import settings
 from django.utils import timezone
 
@@ -10,9 +11,17 @@ def _get_second_scan_delay() -> timedelta:
     return timedelta(hours=float(hours))
 
 
+def _get_received_after() -> timedelta:
+    # через сколько после 1-го скана ставим "Получен"
+    # можно менять в settings.py: STAFF_AUTO_RECEIVED_AFTER_DAYS = 15
+    days = getattr(settings, "STAFF_AUTO_RECEIVED_AFTER_DAYS", 15)
+    return timedelta(days=float(days))
+
+
 def _advance_cn_flow(parcel: Parcel) -> None:
     """
     Китайская авто-цепочка от auto_flow_started_at.
+    + финальный авто-статус: "Получен" через N дней после 1 скана.
     """
     if not parcel.auto_flow_started_at:
         return
@@ -61,6 +70,24 @@ def _advance_cn_flow(parcel: Parcel) -> None:
         parcel.auto_flow_stage = 4
         changed = True
 
+    # ===== ФИНАЛ: "ПОЛУЧЕН" ЧЕРЕЗ 15 ДНЕЙ (или сколько задашь) =====
+    received_after = _get_received_after()
+    if dt >= received_after and parcel.status != Parcel.Status.RECEIVED:
+        # не спамим дублями
+        already = ParcelHistory.objects.filter(
+            parcel=parcel,
+            status=Parcel.Status.RECEIVED,
+        ).exists()
+        if not already:
+            ParcelHistory.objects.create(
+                parcel=parcel,
+                status=Parcel.Status.RECEIVED,
+                message="Посылка получена.",
+            )
+
+        parcel.status = Parcel.Status.RECEIVED
+        changed = True
+
     if changed:
         parcel.save(update_fields=["status", "auto_flow_stage", "updated_at"])
 
@@ -86,9 +113,8 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
 
     changed = False
 
-    # этап 1: прибыл в Бишкек/город
     if parcel.local_flow_stage < 1 and dt >= timedelta(seconds=0):
-        msg_city = f"Товар прибыл в Бишкек." if city else "Товар прибыл на территорию Кыргызстана."
+        msg_city = "Товар прибыл в Бишкек." if city else "Товар прибыл на территорию Кыргызстана."
         ParcelHistory.objects.create(
             parcel=parcel,
             status=Parcel.Status.FROM_CN,
@@ -97,7 +123,6 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
         parcel.local_flow_stage = 1
         changed = True
 
-    # этап 2: классификация
     if parcel.local_flow_stage < 2 and dt >= timedelta(hours=2):
         ParcelHistory.objects.create(
             parcel=parcel,
@@ -106,9 +131,6 @@ def _advance_local_flow(parcel: Parcel, pickup_point) -> None:
         )
         parcel.local_flow_stage = 2
         changed = True
-
-    # ❌ этап "прибыл в пункт выдачи" тут УБРАН
-    # Его делает второй скан.
 
     if changed:
         parcel.save(update_fields=["status", "local_flow_stage", "updated_at"])
@@ -143,7 +165,6 @@ def _process_staff_scan(user, track_number: str) -> str:
             message="Товар поступил на склад в Китае",
         )
 
-        # подтянуть авто-китай (на всякий)
         _advance_cn_flow(parcel)
         return "1 скан: Товар зафиксирован на складе в Китае."
 
@@ -156,12 +177,16 @@ def _process_staff_scan(user, track_number: str) -> str:
         m = int((left.total_seconds() % 3600) // 60)
         raise ValueError(f"2 скан будет доступен через {h}ч {m}м.")
 
+    # сначала обновим авто-статусы до текущего времени (включая "Получен" если уже пора)
+    _advance_cn_flow(parcel)
+
+    # если уже получен — второй скан больше не нужен
+    if parcel.status == Parcel.Status.RECEIVED:
+        return "Посылка уже в статусе 'Получен'."
+
     # если уже в пункте выдачи — не дублируем
     if parcel.status == Parcel.Status.AT_PICKUP:
         return "2 скан уже был: посылка уже в пункте выдачи."
-
-    # сначала обновим авто-статусы до текущего времени
-    _advance_cn_flow(parcel)
 
     # локалку начинаем/обновляем (чтобы были 'Бишкек' и 'Классификация' до 2 скана)
     if parcel.local_flow_started_at is None:
@@ -171,14 +196,14 @@ def _process_staff_scan(user, track_number: str) -> str:
 
     _advance_local_flow(parcel, pickup)
 
-    # ===== ВОТ ОН: 2 СКАН СТАВИТ ПУНКТ ВЫДАЧИ =====
+    # ===== 2 СКАН СТАВИТ ПУНКТ ВЫДАЧИ =====
     msg = "Товар прибыл в пункт выдачи"
     if pickup:
         msg += f" {pickup.name}"
         if pickup.address:
             msg += f", адрес: {pickup.address}"
-        if pickup:
-            msg += f", Номер телефона {pickup.phone}"
+        if pickup.phone:
+            msg += f", номер телефона {pickup.phone}"
     msg += "."
 
     ParcelHistory.objects.create(

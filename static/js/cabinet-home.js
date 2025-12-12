@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const trackSearchForm = document.getElementById("trackSearchForm");
   const trackSearchInput = document.getElementById("trackSearchInput");
-  const trackSearchError = document.getElementById("trackSearchError"); // если есть в HTML
+  const trackSearchError = document.getElementById("trackSearchError"); // есть в HTML
 
   // ====== UTILS ======
   function openModal(modalEl) {
@@ -123,18 +123,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // навешиваем слушатель на существующее первое поле
     const firstInput = trackAddInputsContainer.querySelector(
       "input[name='tracks']"
     );
     if (firstInput) firstInput.addEventListener("input", onInputChange);
 
-    // обработчик кнопки сброса
     if (trackResetBtn) {
       trackResetBtn.addEventListener("click", (e) => {
         e.preventDefault();
 
-        // очищаем контейнер и создаём одно пустое поле
         trackAddInputsContainer.innerHTML = "";
 
         const input = document.createElement("input");
@@ -279,7 +276,8 @@ document.addEventListener("DOMContentLoaded", () => {
               ? "timeline-item__dot timeline-item__dot--active"
               : "timeline-item__dot";
 
-            const title = (e.message || "").trim() || (e.status_display || "").trim();
+            const title =
+              (e.message || "").trim() || (e.status_display || "").trim();
 
             const titleClass = e.is_latest
               ? "timeline-item__status timeline-item__status--active"
@@ -290,7 +288,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="${dotClass}"></div>
                 <div class="timeline-item__content">
                   <p class="${titleClass}">${escapeHtml(title)}</p>
-                  <p class="timeline-item__date">${escapeHtml(e.datetime || "")}</p>
+                  <p class="timeline-item__date">${escapeHtml(
+                    e.datetime || ""
+                  )}</p>
                 </div>
               </div>
             `;
@@ -334,7 +334,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (trackItem && trackItem.dataset.historyUrl) {
       const url = trackItem.dataset.historyUrl;
       const trackNumber =
-        trackItem.querySelector(".track-item__number")?.textContent?.trim() || "";
+        trackItem.querySelector(".track-item__number")?.textContent?.trim() ||
+        "";
       loadParcelHistory(url, trackNumber);
     }
   });
