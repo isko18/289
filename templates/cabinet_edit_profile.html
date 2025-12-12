@@ -7,6 +7,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta>
   <link rel="stylesheet" href="{% static 'css/cabinet-edit-profile.css' %}" />
+  {% if site_settings and site_settings.logo %}
+  <link rel="icon" type="image/png" href="{{ site_settings.logo.url }}">
+{% else %}
+  <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
+{% endif %}
+
 </head>
 <body
   class="theme-light"

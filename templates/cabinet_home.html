@@ -6,6 +6,12 @@
   <title>kargoexpress281 — Личный кабинет</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{% static 'css/cabinet-home.css' %}" />
+  {% if site_settings and site_settings.logo %}
+  <link rel="icon" type="image/png" href="{{ site_settings.logo.url }}">
+{% else %}
+  <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
+{% endif %}
+
 </head>
 
 <body
