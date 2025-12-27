@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const recentList = document.getElementById("staffRecentList");
 
+  const normTrack = (v) => String(v || "").replace(/\s+/g, "").trim();
+  const normNote = (v) => String(v || "").trim();
+
   // автофокус на поле сканера
   if (trackInput) {
     trackInput.focus();
@@ -33,15 +36,40 @@ document.addEventListener("DOMContentLoaded", () => {
   autoHideAlert(alertError);
   autoHideAlert(alertSuccess);
 
-  // чистим пробелы перед отправкой
+  // чистим трек на лету (сканеры часто вставляют перевод строки/пробелы)
+  if (trackInput) {
+    const onClean = () => {
+      const cleaned = normTrack(trackInput.value);
+      if (trackInput.value !== cleaned) {
+        const pos = trackInput.selectionStart || cleaned.length;
+        trackInput.value = cleaned;
+        try {
+          trackInput.setSelectionRange(pos, pos);
+        } catch (_) {}
+      }
+    };
+
+    trackInput.addEventListener("input", onClean);
+    trackInput.addEventListener("paste", () => {
+      // после paste значение появится чуть позже
+      setTimeout(onClean, 0);
+    });
+
+    // если сканер/юзер жмёт Enter — отправляем форму
+    trackInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (form) form.requestSubmit();
+      }
+    });
+  }
+
+  // чистим пробелы перед отправкой (финальный контроль)
   if (form && trackInput) {
     form.addEventListener("submit", () => {
-      trackInput.value = trackInput.value.trim().replace(/\s+/g, "");
-      if (noteTextarea) {
-        noteTextarea.value = noteTextarea.value.trim();
-      }
-      // после submit браузер перезагрузит страницу,
-      // на новой странице поле опять автофокусится.
+      trackInput.value = normTrack(trackInput.value);
+      if (noteTextarea) noteTextarea.value = normNote(noteTextarea.value);
+      // страница перезагрузится, после загрузки снова будет автофокус
     });
   }
 
@@ -59,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
     recentList.addEventListener("click", (e) => {
       const item = e.target.closest(".staff-list-item");
       if (!item) return;
-      const track = item.dataset.track || "";
+      const track = normTrack(item.dataset.track || "");
       if (track) {
         trackInput.value = track;
         trackInput.focus();

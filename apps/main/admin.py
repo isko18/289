@@ -1,5 +1,5 @@
 from django.contrib import admin
-from apps.main.models import User, PickupPoint, CabinetProfile, Parcel, SiteSettings
+from apps.main.models import PickupPoint, CabinetProfile, Parcel, SiteSettings
 # admin.site.register(User)
 
 

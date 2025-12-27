@@ -1,18 +1,19 @@
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import CabinetProfile, PickupPoint, Parcel, ParcelHistory
+from .models import CabinetProfile, PickupPoint, Parcel
 from apps.main.auto_status import (
     _process_staff_scan,
     _advance_cn_flow,
     _advance_local_flow,
 )
+
+User = get_user_model()
 
 
 def _normalize_phone(phone: str) -> str:
@@ -23,23 +24,55 @@ def _normalize_phone(phone: str) -> str:
     if not raw:
         return ""
 
-    # если уже с +996..., оставляем
     if raw.startswith("+996"):
         return raw
 
-    # если содержит только цифры и начинается на 996
     if raw.startswith("996"):
         return "+{}".format(raw)
 
-    # если это только 9 цифр — добавим +996
     if len(raw) == 9 and raw.isdigit():
         return "+996" + raw
 
-    # на крайняк — просто плюс и то, что дали
     if not raw.startswith("+"):
         raw = "+" + raw
 
     return raw
+
+
+def _normalize_track(track: str) -> str:
+    t = (track or "").strip().replace(" ", "")
+    if not t:
+        return ""
+
+    max_len = Parcel._meta.get_field("track_number").max_length
+    if len(t) > max_len:
+        # не режем молча — лучше явно
+        return ""
+    return t
+
+
+def _advance_cn(parcel: Parcel, now):
+    """
+    Совместимость:
+    - если авто-функция принимает (parcel, now) — ок
+    - если принимает (parcel) — тоже ок
+    """
+    try:
+        _advance_cn_flow(parcel, now)
+    except TypeError:
+        _advance_cn_flow(parcel)
+
+
+def _advance_local(parcel: Parcel, pickup, now):
+    """
+    Совместимость:
+    - если авто-функция принимает (parcel, pickup, now) — ок
+    - если принимает (parcel, pickup) — тоже ок
+    """
+    try:
+        _advance_local_flow(parcel, pickup, now)
+    except TypeError:
+        _advance_local_flow(parcel, pickup)
 
 
 # ================== РЕГИСТРАЦИЯ ==================
@@ -47,43 +80,34 @@ def _normalize_phone(phone: str) -> str:
 
 @require_http_methods(["GET", "POST"])
 def register_view(request):
-    # если уже залогинен — сразу в нужный кабинет
     if request.user.is_authenticated:
         profile = getattr(request.user, "cabinet_profile", None)
         if profile and profile.is_employee:
             return redirect("staff_parcels")
         return redirect("cabinet_home")
 
-    context = {
-        "form_data": {},
-        "errors": {},
-    }
+    context = {"form_data": {}, "errors": {}}
 
     if request.method == "GET":
         return render(request, "register.html", context)
 
-    # POST
     full_name = request.POST.get("full_name", "").strip()
     phone_input = request.POST.get("phone", "")
     password = request.POST.get("password", "")
     password_confirm = request.POST.get("password_confirm", "")
 
     phone = _normalize_phone(phone_input)
-
     errors = {}
 
-    # ФИО
     if not full_name:
         errors["full_name"] = "Укажите ФИО."
 
-    # Телефон
     if not phone:
         errors["phone"] = "Укажите номер телефона."
     else:
         if User.objects.filter(username=phone).exists():
             errors["phone"] = "Пользователь с таким телефоном уже зарегистрирован."
 
-    # Пароль
     if not password or not password_confirm:
         errors["password"] = "Укажите пароль и его подтверждение."
     elif password != password_confirm:
@@ -91,30 +115,20 @@ def register_view(request):
 
     if errors:
         context["errors"] = errors
-        context["form_data"] = {
-            "full_name": full_name,
-            "phone": phone_input,
-        }
+        context["form_data"] = {"full_name": full_name, "phone": phone_input}
         return render(request, "register.html", context)
 
-    # создаём пользователя
-    user = User.objects.create_user(
-        username=phone,
-        password=password,
-    )
+    user = User.objects.create_user(username=phone, password=password)
     user.first_name = full_name
-    user.save()
+    user.save(update_fields=["first_name"])
 
-    # профиль без пункта выдачи (pickup_point=None)
     CabinetProfile.objects.create(
         user=user,
-        full_name=full_name,   # <<< ВАЖНО
+        full_name=full_name,
         phone=phone,
         is_employee=False,
     )
 
-
-    # автологин
     login(request, user)
     return redirect("cabinet_home")
 
@@ -124,28 +138,22 @@ def register_view(request):
 
 @require_http_methods(["GET", "POST"])
 def login_view(request):
-    # если уже залогинен — сразу в нужный кабинет
     if request.user.is_authenticated:
         profile = getattr(request.user, "cabinet_profile", None)
         if profile and profile.is_employee:
             return redirect("staff_parcels")
         return redirect("cabinet_home")
 
-    context = {
-        "errors": {},
-        "form_data": {},
-    }
+    context = {"errors": {}, "form_data": {}}
 
     if request.method == "GET":
         return render(request, "login.html", context)
 
     phone_input = request.POST.get("phone", "")
     password = request.POST.get("password", "")
-
     phone = _normalize_phone(phone_input)
 
     errors = {}
-
     if not phone:
         errors["phone"] = "Укажите номер телефона."
     if not password:
@@ -159,14 +167,11 @@ def login_view(request):
 
     if errors or user is None:
         context["errors"] = errors
-        context["form_data"] = {
-            "phone": phone_input,
-        }
+        context["form_data"] = {"phone": phone_input}
         return render(request, "login.html", context)
 
     login(request, user)
 
-    # после логина сразу маршрутизируем по роли
     profile = getattr(user, "cabinet_profile", None)
     if profile and profile.is_employee:
         return redirect("staff_parcels")
@@ -186,7 +191,6 @@ def logout_view(request):
 def cabinet_home(request):
     profile = getattr(request.user, "cabinet_profile", None)
 
-    # если это сотрудник — сразу в панель сотрудника
     if profile and profile.is_employee:
         return redirect("staff_parcels")
 
@@ -195,35 +199,34 @@ def cabinet_home(request):
         cleaned = []
 
         for t in raw_tracks:
-            t = (t or "").strip().replace(" ", "")
-            if not t:
+            t2 = _normalize_track(t)
+            if not t2:
                 continue
-            t = t[:20]
-            cleaned.append(t)
+            cleaned.append(t2)
 
         cleaned = cleaned[:5]
 
         for track in cleaned:
-            parcel, created = Parcel.objects.get_or_create(
+            parcel, _ = Parcel.objects.get_or_create(
                 track_number=track,
                 defaults={"status": Parcel.Status.WAITING_CN},
             )
-            if parcel.user is None:
+            if parcel.user_id is None:
                 parcel.user = request.user
-                parcel.save()
+                parcel.save(update_fields=["user"])
 
         return redirect("cabinet_home")
 
-    # ---- авто-обновление статусов перед показом ----
+    now = timezone.now()
     pickup = getattr(profile, "pickup_point", None)
 
     user_parcels = list(Parcel.objects.filter(user=request.user))
 
+    # авто-обновление статусов перед показом
     for p in user_parcels:
-        _advance_cn_flow(p)
-        _advance_local_flow(p, pickup)
+        _advance_cn(p, now)
+        _advance_local(p, pickup, now)
 
-    # перечитываем из базы уже обновлённые значения
     user_parcels_qs = Parcel.objects.filter(user=request.user)
 
     status_counts = {1: 0, 2: 0, 3: 0, 4: 0}
@@ -240,7 +243,6 @@ def cabinet_home(request):
         "status_count_3": status_counts[3],
         "status_count_4": status_counts[4],
     }
-
     return render(request, "cabinet_home.html", context)
 
 
@@ -249,24 +251,12 @@ def cabinet_home(request):
 
 @login_required
 def cabinet_profile(request):
-    """
-    Просмотр профиля.
-    """
     profile = getattr(request.user, "cabinet_profile", None)
-    return render(
-        request,
-        "cabinet_profile.html",
-        {
-            "user_profile": profile,
-        },
-    )
+    return render(request, "cabinet_profile.html", {"user_profile": profile})
 
 
 @login_required
 def cabinet_profile_edit(request):
-    """
-    Редактирование профиля.
-    """
     profile, _ = CabinetProfile.objects.get_or_create(
         user=request.user,
         defaults={
@@ -282,14 +272,9 @@ def cabinet_profile_edit(request):
         return render(
             request,
             "cabinet_edit_profile.html",
-            {
-                "user_profile": profile,
-                "pickup_points": pickup_points,
-                "errors": {},
-            },
+            {"user_profile": profile, "pickup_points": pickup_points, "errors": {}},
         )
 
-    # POST — сохраняем изменения
     full_name = request.POST.get("full_name", "").strip()
     phone_input = request.POST.get("phone", "")
     pickup_point_id = request.POST.get("pickup_point", "")
@@ -304,16 +289,12 @@ def cabinet_profile_edit(request):
     if not phone:
         errors["phone"] = "Укажите номер телефона."
     else:
-        # проверяем, что номер не занят другим пользователем
         if User.objects.filter(username=phone).exclude(pk=request.user.pk).exists():
             errors["phone"] = "Пользователь с таким телефоном уже зарегистрирован."
 
     if pickup_point_id:
         try:
-            pickup_point_obj = PickupPoint.objects.get(
-                pk=pickup_point_id,
-                is_active=True,
-            )
+            pickup_point_obj = PickupPoint.objects.get(pk=pickup_point_id, is_active=True)
         except PickupPoint.DoesNotExist:
             errors["pickup_point"] = "Неверный пункт выдачи."
 
@@ -335,12 +316,12 @@ def cabinet_profile_edit(request):
 
     request.user.first_name = full_name
     request.user.username = phone
-    request.user.save()
-    
-    profile.full_name = full_name     
+    request.user.save(update_fields=["first_name", "username"])
+
+    profile.full_name = full_name
     profile.phone = phone
     profile.pickup_point = pickup_point_obj
-    profile.save()
+    profile.save(update_fields=["full_name", "phone", "pickup_point"])
 
     return redirect("cabinet_profile")
 
@@ -359,10 +340,11 @@ def staff_parcels_view(request):
     success_message = ""
 
     if request.method == "POST":
-        track = (request.POST.get("track_number", "") or "").strip().replace(" ", "")
+        track_raw = request.POST.get("track_number", "")
+        track = _normalize_track(track_raw)
 
         if not track:
-            error_message = "Укажите трек-номер."
+            error_message = "Укажите корректный трек-номер."
         else:
             try:
                 success_message = _process_staff_scan(request.user, track)
@@ -372,11 +354,15 @@ def staff_parcels_view(request):
                 error_message = "Ошибка обработки трек-номера."
 
     recent_parcels = Parcel.objects.order_by("-created_at")[:30]
-    return render(request, "staff_parcels.html", {
-        "error_message": error_message,
-        "success_message": success_message,
-        "recent_parcels": recent_parcels,
-    })
+    return render(
+        request,
+        "staff_parcels.html",
+        {
+            "error_message": error_message,
+            "success_message": success_message,
+            "recent_parcels": recent_parcels,
+        },
+    )
 
 
 # ================== ИСТОРИЯ КОНКРЕТНОЙ ПОСЫЛКИ (JSON) ==================
@@ -384,25 +370,19 @@ def staff_parcels_view(request):
 
 @login_required
 def parcel_history_view(request, pk: int):
-    """
-    JSON для истории конкретной посылки (таймлайн в модалке).
-    Перед отдачей истории подтягиваем авто-этапы по текущему времени.
-    """
     parcel = get_object_or_404(Parcel, pk=pk, user=request.user)
 
-    # подтянем авто-статусы перед формированием ответа
+    now = timezone.now()
     profile = getattr(request.user, "cabinet_profile", None)
     pickup = getattr(profile, "pickup_point", None)
 
-    _advance_cn_flow(parcel)
-    _advance_local_flow(parcel, pickup)
+    _advance_cn(parcel, now)
+    _advance_local(parcel, pickup, now)
 
     events = []
     qs = getattr(parcel, "history", None)
 
     if qs is not None:
-        # после _advance_* в истории уже будут новые записи,
-        # берём их в порядке "новые сверху"
         for idx, h in enumerate(qs.all().order_by("-created_at")):
             events.append(
                 {
@@ -414,9 +394,7 @@ def parcel_history_view(request, pk: int):
             )
 
     if not events:
-        created = (
-            parcel.created_at if hasattr(parcel, "created_at") else timezone.now()
-        )
+        created = parcel.created_at if hasattr(parcel, "created_at") else now
         events.append(
             {
                 "status_display": parcel.get_status_display(),
@@ -426,24 +404,13 @@ def parcel_history_view(request, pk: int):
             }
         )
 
-    return JsonResponse(
-        {
-            "track_number": parcel.track_number,
-            "events": events,
-        }
-    )
+    return JsonResponse({"track_number": parcel.track_number, "events": events})
 
 
 # ================== РЕДИРЕКТ С ГЛАВНОЙ ==================
 
 
 def index_redirect(request):
-    """
-    / -> если залогинен:
-           сотрудник -> staff_parcels
-           клиент    -> cabinet_home
-         если нет -> login
-    """
     if request.user.is_authenticated:
         profile = getattr(request.user, "cabinet_profile", None)
         if profile and profile.is_employee:
@@ -452,10 +419,13 @@ def index_redirect(request):
     return redirect("login")
 
 
+# ================== ПУБЛИЧНЫЙ ТРЕКИНГ (у тебя сейчас login_required) ==================
+
+
 @login_required
 @require_http_methods(["GET"])
 def track_public_lookup_view(request):
-    track = (request.GET.get("track") or "").strip().replace(" ", "")
+    track = _normalize_track(request.GET.get("track") or "")
     if not track:
         return JsonResponse({"ok": False, "error": "empty_track"}, status=400)
 
@@ -463,58 +433,62 @@ def track_public_lookup_view(request):
     if not parcel:
         return JsonResponse({"ok": False, "error": "not_found"}, status=404)
 
-    # ⚠️ ВАЖНО: авто-статусы НЕ зависимы от пункта выдачи клиента, поэтому pickup сюда не пихаем
-    # Иначе чужой пользователь будет влиять на локальный флоу.
-    _advance_cn_flow(parcel)
-    # локальный флоу можно включать ТОЛЬКО если у посылки есть owner и его pickup (или вообще не включать тут)
+    now = timezone.now()
+
+    _advance_cn(parcel, now)
     if parcel.user_id:
         owner_profile = getattr(parcel.user, "cabinet_profile", None)
         owner_pickup = getattr(owner_profile, "pickup_point", None)
-        _advance_local_flow(parcel, owner_pickup)
+        _advance_local(parcel, owner_pickup, now)
 
-    return JsonResponse({
-        "ok": True,
-        "track_number": parcel.track_number,
-        "status": parcel.status,
-        "status_label": parcel.get_status_display(),
-        "parcel_id": parcel.id,
-        "history_url": f"/cabinet/api/parcels/{parcel.id}/history-public/",
-    })
-    
+    return JsonResponse(
+        {
+            "ok": True,
+            "track_number": parcel.track_number,
+            "status": parcel.status,
+            "status_label": parcel.get_status_display(),
+            "parcel_id": parcel.id,
+            "history_url": f"/cabinet/api/parcels/{parcel.id}/history-public/",
+        }
+    )
+
+
 @login_required
 @require_http_methods(["GET"])
 def parcel_history_public_view(request, pk: int):
     parcel = get_object_or_404(Parcel, pk=pk)
 
-    # авто-статусы обновляем безопасно
-    _advance_cn_flow(parcel)
+    now = timezone.now()
+
+    _advance_cn(parcel, now)
     if parcel.user_id:
         owner_profile = getattr(parcel.user, "cabinet_profile", None)
         owner_pickup = getattr(owner_profile, "pickup_point", None)
-        _advance_local_flow(parcel, owner_pickup)
+        _advance_local(parcel, owner_pickup, now)
 
     events = []
     qs = getattr(parcel, "history", None)
 
     if qs is not None:
         for idx, h in enumerate(qs.all().order_by("-created_at")):
-            events.append({
-                "status_display": h.get_status_display(),
-                "message": getattr(h, "message", "") or "",
-                "datetime": h.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_latest": idx == 0,
-            })
+            events.append(
+                {
+                    "status_display": h.get_status_display(),
+                    "message": getattr(h, "message", "") or "",
+                    "datetime": h.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "is_latest": idx == 0,
+                }
+            )
 
     if not events:
-        created = parcel.created_at if hasattr(parcel, "created_at") else timezone.now()
-        events.append({
-            "status_display": parcel.get_status_display(),
-            "message": "",
-            "datetime": created.strftime("%Y-%m-%d %H:%M:%S"),
-            "is_latest": True,
-        })
+        created = parcel.created_at if hasattr(parcel, "created_at") else now
+        events.append(
+            {
+                "status_display": parcel.get_status_display(),
+                "message": "",
+                "datetime": created.strftime("%Y-%m-%d %H:%M:%S"),
+                "is_latest": True,
+            }
+        )
 
-    return JsonResponse({
-        "track_number": parcel.track_number,
-        "events": events,
-    })
+    return JsonResponse({"track_number": parcel.track_number, "events": events})

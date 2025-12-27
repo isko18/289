@@ -1,17 +1,29 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.validators import RegexValidator
+from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
+
+
+# Телефон в формате E.164 (например: +996XXXXXXXXX)
+phone_validator = RegexValidator(
+    regex=r"^\+\d{6,15}$",
+    message=_("Телефон должен быть в формате +<код><номер>, например +996700123456"),
+)
+
+# Трек: буквы/цифры и немного безопасных символов
+track_validator = RegexValidator(
+    regex=r"^[A-Za-z0-9._\-]{1,64}$",
+    message=_("Трек-номер может содержать только буквы/цифры и символы . _ -"),
+)
+
 
 class SiteSettings(models.Model):
     """
     Глобальные настройки витрины/кабинета.
-    Делаем одну запись и правим её через админку.
+    Держим одну запись (singleton).
     """
-    title = models.CharField(
-        "Название проекта",
-        max_length=100,
-        default="kargoexpress",
-    )
+    title = models.CharField("Название проекта", max_length=100, default="kargoexpress")
 
     logo = models.ImageField(
         "Логотип",
@@ -37,45 +49,62 @@ class SiteSettings(models.Model):
         help_text="Можно GIF или картинку. Используется в тёмном режиме.",
     )
 
-    default_dark_mode = models.BooleanField(
-        "Тёмная тема по умолчанию",
-        default=False,
-    )
-
+    default_dark_mode = models.BooleanField("Тёмная тема по умолчанию", default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Настройки сайта"
         verbose_name_plural = "Настройки сайта"
 
+    def save(self, *args, **kwargs):
+        # Жёсткий singleton: всегда id=1
+        self.pk = 1
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.title or "Настройки сайта"
-
 
 
 class PickupPoint(models.Model):
     name = models.CharField("Название", max_length=255)
     address = models.CharField("Адрес", max_length=255, blank=True)
-    phone = models.CharField(max_length=255, verbose_name="Номер телефона", blank=True, null=True)
+    phone = models.CharField(
+        "Номер телефона",
+        max_length=32,
+        blank=True,
+        null=True,
+        validators=[phone_validator],
+    )
     is_active = models.BooleanField("Активен", default=True)
 
     class Meta:
         verbose_name = "Пункт выдачи"
         verbose_name_plural = "Пункты выдачи"
+        indexes = [
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["name"]),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.address})" if self.address else self.name
 
 
-
 class CabinetProfile(models.Model):
     user = models.OneToOneField(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="cabinet_profile",
     )
-    full_name = models.CharField(max_length=255, verbose_name="ФИО")
-    phone = models.CharField("Телефон", max_length=32, blank=True, unique=True)
+    full_name = models.CharField("ФИО", max_length=255)
+
+    phone = models.CharField(
+        "Телефон",
+        max_length=32,
+        blank=True,
+        null=True,
+        validators=[phone_validator],
+    )
+
     pickup_point = models.ForeignKey(
         PickupPoint,
         on_delete=models.SET_NULL,
@@ -89,9 +118,17 @@ class CabinetProfile(models.Model):
     class Meta:
         verbose_name = "Профиль кабинета"
         verbose_name_plural = "Профили кабинета"
+        constraints = [
+            # уникален только если не NULL и не пустая строка
+            models.UniqueConstraint(
+                fields=["phone"],
+                condition=Q(phone__isnull=False) & ~Q(phone=""),
+                name="uniq_cabinet_phone_not_empty",
+            ),
+        ]
 
     def __str__(self):
-        return f"Профиль {self.user.username}"
+        return f"Профиль {getattr(self.user, 'username', self.user_id)}"
 
 
 class Parcel(models.Model):
@@ -103,32 +140,33 @@ class Parcel(models.Model):
         RECEIVED = 4, "Получен"
 
     user = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="parcels",
         verbose_name="Пользователь (если уже привязан)",
     )
-    track_number = models.CharField("Трек-номер", max_length=20, unique=True)
-    status = models.IntegerField(
-        "Текущий статус", choices=Status.choices, default=Status.WAITING_CN
+
+    track_number = models.CharField(
+        "Трек-номер",
+        max_length=64,
+        unique=True,
+        validators=[track_validator],
     )
 
-    # авто-цепочка для «китайского» склада
-    auto_flow_started_at = models.DateTimeField(
-        "Старт авто-цепочки (Китай)", null=True, blank=True
+    status = models.PositiveSmallIntegerField(
+        "Текущий статус",
+        choices=Status.choices,
+        default=Status.WAITING_CN,
+        db_index=True,
     )
-    auto_flow_stage = models.PositiveSmallIntegerField(
-        "Этап авто-цепочки", default=0
-    )
-    # авто-цепочка для «местного» склада (после второго скана)
-    local_flow_started_at = models.DateTimeField(
-        "Старт локальной цепочки (Киргизия)", null=True, blank=True
-    )
-    local_flow_stage = models.PositiveSmallIntegerField(
-        "Этап локальной цепочки", default=0
-    )
+
+    auto_flow_started_at = models.DateTimeField("Старт авто-цепочки (Китай)", null=True, blank=True)
+    auto_flow_stage = models.PositiveSmallIntegerField("Этап авто-цепочки", default=0)
+
+    local_flow_started_at = models.DateTimeField("Старт локальной цепочки (Киргизия)", null=True, blank=True)
+    local_flow_stage = models.PositiveSmallIntegerField("Этап локальной цепочки", default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -136,6 +174,10 @@ class Parcel(models.Model):
     class Meta:
         verbose_name = "Посылка"
         verbose_name_plural = "Посылки"
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["user", "status"]),
+        ]
 
     def __str__(self):
         return self.track_number
@@ -148,9 +190,7 @@ class ParcelHistory(models.Model):
         related_name="history",
         verbose_name="Посылка",
     )
-    status = models.IntegerField(
-        "Статус", choices=Parcel.Status.choices
-    )
+    status = models.PositiveSmallIntegerField("Статус", choices=Parcel.Status.choices, db_index=True)
     message = models.TextField("Сообщение", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -158,6 +198,9 @@ class ParcelHistory(models.Model):
         verbose_name = "История посылки"
         verbose_name_plural = "История посылок"
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["parcel", "created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.parcel.track_number}: {self.get_status_display()}"
