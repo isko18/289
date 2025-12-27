@@ -7,11 +7,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{% static 'css/staff-parcels.css' %}" />
   {% if site_settings and site_settings.logo %}
-  <link rel="icon" type="image/png" href="{{ site_settings.logo.url }}">
-{% else %}
-  <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
-{% endif %}
-
+    <link rel="icon" type="image/png" href="{{ site_settings.logo.url }}">
+  {% else %}
+    <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
+  {% endif %}
 </head>
 <body>
   <div class="app app--staff">
@@ -34,16 +33,16 @@
           <h1 class="card__title">Добавить трек-номер</h1>
           <p class="card__subtitle">
             Сканируйте или введите трек-номер посылки. Первый скан запускает цепочку из Китая,
-            последующие сканы — локальную цепочку до пункта выдачи.
+            второй скан (после задержки) — ставит прибытие в пункт выдачи.
           </p>
 
           {% if error_message %}
-            <div class="alert alert--error">
+            <div id="staffAlertError" class="alert alert--error">
               {{ error_message }}
             </div>
           {% endif %}
           {% if success_message %}
-            <div class="alert alert--success">
+            <div id="staffAlertSuccess" class="alert alert--success">
               {{ success_message }}
             </div>
           {% endif %}
@@ -55,25 +54,34 @@
             action="{% url 'staff_parcels' %}"
           >
             {% csrf_token %}
+
             <div class="input-wrapper">
               <input
                 id="staffTrackInput"
                 name="track_number"
                 type="text"
                 class="input input--staff"
-                maxlength="20"
+                maxlength="64"
                 autocomplete="off"
                 placeholder="Трек-номер"
                 required
               />
             </div>
 
-            <button type="submit" class="btn btn--primary">
-              Добавить
-            </button>
+
+            <div class="staff-form__actions">
+              <button type="submit" class="btn btn--primary">
+                Добавить
+              </button>
+              <br>
+              <br>
+              <button id="staffClearBtn" type="button" class="btn btn--ghost">
+                Очистить
+              </button>
+            </div>
 
             <p class="helper-text">
-              Длина трек-номера 1–20 символов, без пробелов.
+              Без пробелов. Максимум 64 символа.
             </p>
           </form>
         </div>
@@ -88,9 +96,9 @@
           </div>
 
           {% if recent_parcels %}
-            <div class="recent-list">
+            <div id="staffRecentList" class="recent-list">
               {% for parcel in recent_parcels %}
-                <div class="recent-item">
+                <div class="recent-item staff-list-item" data-track="{{ parcel.track_number }}">
                   <div class="recent-item__left">
                     <p class="recent-item__number">
                       {{ parcel.track_number }}
