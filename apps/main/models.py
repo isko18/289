@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
-
+from django.utils import timezone
 
 # Телефон в формате E.164 (например: +996XXXXXXXXX)
 phone_validator = RegexValidator(
@@ -192,14 +192,19 @@ class ParcelHistory(models.Model):
     )
     status = models.PositiveSmallIntegerField("Статус", choices=Parcel.Status.choices, db_index=True)
     message = models.TextField("Сообщение", blank=True)
+
+    # ✅ точное время события по расписанию
+    occurred_at = models.DateTimeField("Время события", default=timezone.now, db_index=True)
+
+    # ✅ когда реально вставили запись в БД
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "История посылки"
         verbose_name_plural = "История посылок"
-        ordering = ("-created_at",)
+        ordering = ("-occurred_at", "-id")
         indexes = [
-            models.Index(fields=["parcel", "created_at"]),
+            models.Index(fields=["parcel", "occurred_at"]),
         ]
 
     def __str__(self):
