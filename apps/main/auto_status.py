@@ -199,7 +199,7 @@ def _process_staff_scan(user, track_number: str) -> str:
             _add_history_once(
                 parcel,
                 Parcel.Status.AT_CN,
-                "Товар поступил на склад в Китае [LIDER CARGO]",
+                "Товар поступил на склад в Китае",
             )
 
             _advance_all_flows(parcel, pickup, now)
