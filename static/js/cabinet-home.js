@@ -20,9 +20,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const trackSearchForm = document.getElementById("trackSearchForm");
   const trackSearchInput = document.getElementById("trackSearchInput");
-  const trackSearchError = document.getElementById("trackSearchError"); // есть в HTML
+  const trackSearchError = document.getElementById("trackSearchError");
+
+  const TRACK_MAX_LEN = 64;
 
   // ====== UTILS ======
+
+  function formatBeijingTime(dateStr) {
+  if (!dateStr) return "";
+
+  const d = new Date(dateStr.replace(" ", "T"));
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Shanghai", // Пекин
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
+}
+
   function openModal(modalEl) {
     if (!modalEl) return;
     modalEl.classList.remove("hidden");
@@ -47,7 +66,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function cleanTrack(v) {
-    return (v || "").trim().replace(/\s+/g, "").slice(0, 20);
+    return (v || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .toUpperCase()
+      .slice(0, TRACK_MAX_LEN);
   }
 
   function statusLabel(status) {
@@ -76,22 +99,73 @@ document.addEventListener("DOMContentLoaded", () => {
       .replaceAll("'", "&#039;");
   }
 
-  // переносим "Номер телефона ..." на новую строку
+  // переносим "номер телефона ..." / "адрес ..." на новую строку, независимо от регистра
   function formatAutoMessage(msg) {
     let s = String(msg || "");
 
-    // 1) переносим "Номер телефона ..." на новую строку (любой вариант)
-    s = s.replace(/\s+Номер телефона\s*(?::\s*)?/i, "\nНомер телефона: ");
+    s = s.replace(/\s+номер телефона\s*(?::\s*)?/i, "\nНомер телефона: ");
+    s = s.replace(/\s+адрес\s*(?::\s*)?/i, "\nАдрес: ");
 
-    // 2) на всякий: если где-то осталось "телефона :"
+    // подчищаем двойные двоеточия/пробелы
     s = s.replace(/Номер телефона\s*:\s*/gi, "Номер телефона: ");
+    s = s.replace(/Адрес\s*:\s*/gi, "Адрес: ");
 
     return s.trim();
   }
 
   function htmlWithLineBreaks(text) {
-    // безопасно: сначала экранируем, потом \n -> <br>
     return escapeHtml(text).replaceAll("\n", "<br>");
+  }
+
+  function renderHistoryFromEvents(events, trackNumber) {
+    if (!historyModal || !historyTimeline || !historyModalTitle) return;
+
+    const tn = (trackNumber || "").trim();
+    historyModalTitle.textContent = "История отслеживания" + (tn ? ` — ${tn}` : "");
+
+    if (!Array.isArray(events) || !events.length) {
+      historyTimeline.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state__icon">⏳</div>
+          <p>История статусов пока отсутствует.</p>
+        </div>
+      `;
+      openModal(historyModal);
+      return;
+    }
+
+    historyTimeline.innerHTML = events
+      .map((e) => {
+        const dotClass = e.is_latest
+          ? "timeline-item__dot timeline-item__dot--active"
+          : "timeline-item__dot";
+
+        const rawTitle =
+          (e.message || "").trim() || (e.status_display || "").trim();
+
+        const title = formatAutoMessage(rawTitle);
+
+        const titleClass = e.is_latest
+          ? "timeline-item__status timeline-item__status--active"
+          : "timeline-item__status";
+
+        return `
+          <div class="timeline-item">
+            <div class="${dotClass}"></div>
+            <div class="timeline-item__content">
+              <p class="${titleClass}">${htmlWithLineBreaks(title)}</p>
+              <p class="timeline-item__date">
+  ${escapeHtml(formatBeijingTime(e.datetime))}
+  <span style="opacity:.6;font-size:.85em;">(Пекин)</span>
+</p>
+
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    openModal(historyModal);
   }
 
   // ====== ДИНАМИЧЕСКИЕ ПОЛЯ ДЛЯ ТРЕКОВ (до 5 штук) ======
@@ -135,16 +209,19 @@ document.addEventListener("DOMContentLoaded", () => {
         input.type = "text";
         input.className = "input";
         input.placeholder = "Трек-номер";
-        input.maxLength = 20;
+        input.maxLength = TRACK_MAX_LEN;
+        input.autocomplete = "off";
         input.addEventListener("input", onInputChange);
         trackAddInputsContainer.appendChild(input);
       }
     }
 
-    const firstInput = trackAddInputsContainer.querySelector(
-      "input[name='tracks']"
-    );
-    if (firstInput) firstInput.addEventListener("input", onInputChange);
+    const firstInput = trackAddInputsContainer.querySelector("input[name='tracks']");
+    if (firstInput) {
+      firstInput.maxLength = TRACK_MAX_LEN;
+      firstInput.autocomplete = "off";
+      firstInput.addEventListener("input", onInputChange);
+    }
 
     if (trackResetBtn) {
       trackResetBtn.addEventListener("click", (e) => {
@@ -157,7 +234,8 @@ document.addEventListener("DOMContentLoaded", () => {
         input.type = "text";
         input.className = "input";
         input.placeholder = "Трек-номер";
-        input.maxLength = 20;
+        input.maxLength = TRACK_MAX_LEN;
+        input.autocomplete = "off";
         input.addEventListener("input", onInputChange);
         trackAddInputsContainer.appendChild(input);
 
@@ -170,14 +248,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   attachDynamicInputs();
 
-  // перед отправкой формы чистим пробелы
+  // перед отправкой формы чистим пробелы и приводим к UPPER
   if (trackAddForm && trackAddInputsContainer) {
     trackAddForm.addEventListener("submit", () => {
       const inputs = Array.from(
         trackAddInputsContainer.querySelectorAll("input[name='tracks']")
       );
       inputs.forEach((inp) => {
-        inp.value = inp.value.trim().replace(/\s+/g, "");
+        inp.value = cleanTrack(inp.value);
       });
     });
   }
@@ -186,9 +264,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function openStatusModal(status) {
     if (!trackListWrapper || !statusModalBody || !statusModalTitle) return;
 
-    const allParcels = Array.from(
-      trackListWrapper.querySelectorAll(".track-item")
-    );
+    const allParcels = Array.from(trackListWrapper.querySelectorAll(".track-item"));
 
     const filtered = allParcels.filter(
       (item) => String(item.dataset.status) === String(status)
@@ -213,12 +289,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const statusText =
           item.querySelector(".track-item__status")?.textContent?.trim() || "";
         const historyUrl = item.dataset.historyUrl || "";
-        const parcelId = item.dataset.parcelId || "";
 
         const row = document.createElement("div");
         row.className = "track-item";
         row.dataset.historyUrl = historyUrl;
-        row.dataset.parcelId = parcelId;
 
         row.innerHTML = `
           <div class="track-item__main">
@@ -245,7 +319,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ====== ИСТОРИЯ КОНКРЕТНОЙ ПОСЫЛКИ ======
+  // ====== ИСТОРИЯ КОНКРЕТНОЙ ПОСЫЛКИ (из historyUrl) ======
   function loadParcelHistory(historyUrl, trackNumber) {
     if (!historyModal || !historyTimeline || !historyModalTitle) return;
     if (!historyUrl) return;
@@ -269,51 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return res.json();
       })
       .then((data) => {
-        const events = data.events || [];
-        const tn = data.track_number || trackNumber || "";
-
-        historyModalTitle.textContent =
-          "История отслеживания" + (tn ? ` — ${tn}` : "");
-
-        if (!events.length) {
-          historyTimeline.innerHTML = `
-            <div class="empty-state">
-              <div class="empty-state__icon">⏳</div>
-              <p>История статусов пока отсутствует.</p>
-            </div>
-          `;
-          openModal(historyModal);
-          return;
-        }
-
-        historyTimeline.innerHTML = events
-          .map((e) => {
-            const dotClass = e.is_latest
-              ? "timeline-item__dot timeline-item__dot--active"
-              : "timeline-item__dot";
-
-            const rawTitle =
-              (e.message || "").trim() || (e.status_display || "").trim();
-
-            const title = formatAutoMessage(rawTitle);
-
-            const titleClass = e.is_latest
-              ? "timeline-item__status timeline-item__status--active"
-              : "timeline-item__status";
-
-            return `
-              <div class="timeline-item">
-                <div class="${dotClass}"></div>
-                <div class="timeline-item__content">
-                  <p class="${titleClass}">${htmlWithLineBreaks(title)}</p>
-                  <p class="timeline-item__date">${escapeHtml(e.datetime || "")}</p>
-                </div>
-              </div>
-            `;
-          })
-          .join("");
-
-        openModal(historyModal);
+        renderHistoryFromEvents(data.events || [], data.track_number || trackNumber || "");
       })
       .catch((err) => {
         console.error(err);
@@ -347,14 +377,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (trackItem && trackItem.dataset.historyUrl) {
       const url = trackItem.dataset.historyUrl;
       const tn =
-        trackItem.querySelector(".track-item__number")?.textContent?.trim() ||
-        "";
+        trackItem.querySelector(".track-item__number")?.textContent?.trim() || "";
       loadParcelHistory(url, tn);
     }
   });
 
-  // ====== ПОИСК "ОТСЛЕДИТЬ ТОВАР" (любой трек, даже чужой) ======
+  // ====== ПОИСК "ОТСЛЕДИТЬ ТОВАР" (поиск в кабинете; backend возвращает events) ======
   if (trackSearchForm && trackSearchInput) {
+    trackSearchInput.maxLength = TRACK_MAX_LEN;
     trackSearchInput.addEventListener("input", () => setSearchMsg(""));
 
     trackSearchForm.addEventListener("submit", async (e) => {
@@ -378,23 +408,30 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         );
 
-        if (!res.ok) {
+        if (res.status === 404) {
           setSearchMsg("Трек не найден.");
+          return;
+        }
+
+        if (!res.ok) {
+          setSearchMsg("Не удалось выполнить поиск. Попробуйте позже.");
           return;
         }
 
         const lookup = await res.json();
 
-        if (!lookup || !lookup.ok || !lookup.history_url) {
+        if (!lookup || !lookup.ok) {
           setSearchMsg("Трек не найден.");
           return;
         }
 
         setSearchMsg("");
-        loadParcelHistory(lookup.history_url, lookup.track_number || track);
+
+        // backend отдаёт events — показываем сразу
+        renderHistoryFromEvents(lookup.events || [], lookup.track_number || track);
       } catch (err) {
         console.error(err);
-        setSearchMsg("Трек не найден.");
+        setSearchMsg("Не удалось выполнить поиск. Попробуйте позже.");
       }
     });
   }

@@ -3,15 +3,22 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>kargoexpress281 — Личный кабинет</title>
+  <title>
+    {% if site_settings and site_settings.title %}
+      {{ site_settings.title }} — Личный кабинет
+    {% else %}
+      kargoexpress281 — Личный кабинет
+    {% endif %}
+  </title>
+
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{% static 'css/cabinet-home.css' %}" />
-  {% if site_settings and site_settings.logo %}
-  <link rel="icon" type="image/png" href="{{ site_settings.logo.url }}">
-{% else %}
-  <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
-{% endif %}
 
+  {% if site_settings and site_settings.logo %}
+    <link rel="icon" href="{{ site_settings.logo.url }}">
+  {% else %}
+    <link rel="icon" type="image/png" href="{% static 'img/favicon-32.png' %}">
+  {% endif %}
 </head>
 
 <body
@@ -35,7 +42,7 @@
         {% if site_settings and site_settings.logo %}
           <img
             src="{{ site_settings.logo.url }}"
-            alt="{{ site_settings.title }}"
+            alt="{% if site_settings.title %}{{ site_settings.title }}{% else %}kargoexpress281{% endif %}"
             class="header__logo-img"
           />
         {% else %}
@@ -47,7 +54,6 @@
         {% endif %}
       </div>
 
-      <!-- Переключатель темы -->
       <button
         type="button"
         class="theme-toggle"
@@ -67,17 +73,17 @@
           <div class="card">
             <h2 class="card__title">Отследить товар</h2>
 
-            <form class="track-form" id="trackSearchForm">
+            <form class="track-form" id="trackSearchForm" autocomplete="off">
               <div class="input-wrapper">
                 <input
                   id="trackSearchInput"
                   type="text"
                   class="input"
                   placeholder="Введите трек-номер"
-                  maxlength="20"
+                  maxlength="64"
                   autocomplete="off"
                 />
-                <button type="submit" class="icon-button" title="Искать">
+                <button type="submit" class="icon-button" title="Искать" aria-label="Искать">
                   🔍
                 </button>
               </div>
@@ -86,7 +92,6 @@
                 Введите трек-номер для отслеживания вашей посылки
               </p>
 
-              <!-- сюда JS будет писать "Трек не найден" и т.д. -->
               <p
                 class="helper-text text-center"
                 id="trackSearchError"
@@ -104,6 +109,7 @@
               id="trackAddForm"
               method="post"
               action="{% url 'cabinet_home' %}"
+              autocomplete="off"
             >
               {% csrf_token %}
 
@@ -113,16 +119,16 @@
                   type="text"
                   class="input"
                   placeholder="Трек-номер"
-                  maxlength="20"
+                  maxlength="64"
+                  autocomplete="off"
                 />
               </div>
 
-              <!-- Сброс треков (появляется только при вводе) -->
               <button
                 type="button"
                 class="btn btn--secondary"
                 id="trackResetBtn"
-                style="display: none; margin-top: 0.5rem;"
+                style="display:none; margin-top: 0.5rem;"
               >
                 Сбросить
               </button>
@@ -132,7 +138,7 @@
               </button>
 
               <p class="helper-text text-center">
-                Можно добавить до 5 трек-номеров за один раз. Каждый трек — 1–20 символов.
+                Можно добавить до 5 трек-номеров за один раз. Каждый трек — 1–64 символа.
               </p>
             </form>
           </div>
@@ -150,9 +156,7 @@
                 <span class="status-card__badge" id="status-count-1">
                   {{ status_count_1|default:"0" }}
                 </span>
-                <p class="status-card__label">
-                  Принят на склад в Китае
-                </p>
+                <p class="status-card__label">Принят на склад в Китае</p>
               </button>
 
               <button
@@ -166,9 +170,7 @@
                 >
                   {{ status_count_2|default:"0" }}
                 </span>
-                <p class="status-card__label">
-                  Отправлен из Китая
-                </p>
+                <p class="status-card__label">Отправлен из Китая</p>
               </button>
 
               <button
@@ -179,9 +181,7 @@
                 <span class="status-card__badge" id="status-count-3">
                   {{ status_count_3|default:"0" }}
                 </span>
-                <p class="status-card__label">
-                  Прибыл в пункт выдачи
-                </p>
+                <p class="status-card__label">Прибыл в пункт выдачи</p>
               </button>
 
               <button
@@ -189,11 +189,8 @@
                 class="status-card status-card--s4"
                 data-status="4"
               >
-                <p class="status-card__label">
-                  Получен
-                </p>
+                <p class="status-card__label">Получен</p>
               </button>
-
             </div>
           </div>
 
@@ -211,9 +208,7 @@
                     data-history-url="{% url 'parcel_history' parcel.id %}"
                   >
                     <div class="track-item__main">
-                      <p class="track-item__number">
-                        {{ parcel.track_number }}
-                      </p>
+                      <p class="track-item__number">{{ parcel.track_number }}</p>
                       <p class="track-item__status track-item__status--{{ parcel.status }}">
                         {{ parcel.get_status_display }}
                       </p>
@@ -236,8 +231,7 @@
                 <div class="empty-state">
                   <div class="empty-state__icon">📦</div>
                   <p>
-                    У вас пока нет добавленных посылок. Введите трек-номер выше,
-                    чтобы привязать посылку к своему аккаунту.
+                    У вас пока нет добавленных посылок. Введите трек-номер выше, чтобы привязать посылку к своему аккаунту.
                   </p>
                 </div>
               {% endif %}
@@ -268,46 +262,42 @@
     </nav>
 
     <!-- MODAL: список по статусу -->
-    <div class="modal hidden" id="statusModal">
-      <div class="modal__backdrop"></div>
+    <div class="modal hidden" id="statusModal" aria-hidden="true">
+      <div class="modal__backdrop" data-modal-close="statusModal"></div>
 
-      <div class="modal__content">
+      <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
         <div class="modal__header">
           <h3 class="modal__title" id="statusModalTitle"></h3>
-          <button type="button" class="icon-button" data-modal-close="statusModal">
+          <button type="button" class="icon-button" data-modal-close="statusModal" aria-label="Закрыть">
             ✕
           </button>
         </div>
 
-        <div class="modal__body" id="statusModalBody">
-          <!-- Заполняется из JS -->
-        </div>
+        <div class="modal__body" id="statusModalBody"></div>
       </div>
     </div>
 
     <!-- MODAL: история трека -->
-    <div class="modal hidden" id="historyModal">
-      <div class="modal__backdrop"></div>
+    <div class="modal hidden" id="historyModal" aria-hidden="true">
+      <div class="modal__backdrop" data-modal-close="historyModal"></div>
 
-      <div class="modal__content">
+      <div class="modal__content" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
         <div class="modal__header">
           <h3 class="modal__title" id="historyModalTitle">История отслеживания</h3>
-          <button type="button" class="icon-button" data-modal-close="historyModal">
+          <button type="button" class="icon-button" data-modal-close="historyModal" aria-label="Закрыть">
             ✕
           </button>
         </div>
 
         <div class="modal__body">
-          <div class="timeline" id="historyTimeline">
-            <!-- История трека из JS -->
-          </div>
+          <div class="timeline" id="historyTimeline"></div>
         </div>
       </div>
     </div>
 
     <!-- FOOTER -->
     <footer class="footer">
-      <p>&copy; 2025 kargoexpress281. Все права защищены.</p>
+      <p>&copy; 2025 {% if site_settings and site_settings.title %}{{ site_settings.title }}{% else %}kargoexpress281{% endif %}. Все права защищены.</p>
     </footer>
   </div>
 

@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import CabinetProfile, PickupPoint, Parcel
+from .models import CabinetProfile, PickupPoint, Parcel, track_validator
 from apps.main.auto_status import (
     _process_staff_scan,
     _advance_cn_flow,
@@ -28,7 +28,7 @@ def _normalize_phone(phone: str) -> str:
         return raw
 
     if raw.startswith("996"):
-        return "+{}".format(raw)
+        return f"+{raw}"
 
     if len(raw) == 9 and raw.isdigit():
         return "+996" + raw
@@ -40,39 +40,66 @@ def _normalize_phone(phone: str) -> str:
 
 
 def _normalize_track(track: str) -> str:
+    """
+    Нормализует трек:
+    - убираем пробелы
+    - делаем UPPER (чтобы не было дублей ab12 и AB12)
+    - проверяем валидатором track_validator
+    """
     t = (track or "").strip().replace(" ", "")
     if not t:
         return ""
 
+    t = t.upper()
+
     max_len = Parcel._meta.get_field("track_number").max_length
     if len(t) > max_len:
-        # не режем молча — лучше явно
         return ""
+
+    try:
+        track_validator(t)
+    except Exception:
+        return ""
+
     return t
 
 
-def _advance_cn(parcel: Parcel, now):
-    """
-    Совместимость:
-    - если авто-функция принимает (parcel, now) — ок
-    - если принимает (parcel) — тоже ок
-    """
-    try:
-        _advance_cn_flow(parcel, now)
-    except TypeError:
-        _advance_cn_flow(parcel)
+def _dt_str(dt) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _advance_local(parcel: Parcel, pickup, now):
+def _serialize_history(parcel: Parcel):
     """
-    Совместимость:
-    - если авто-функция принимает (parcel, pickup, now) — ок
-    - если принимает (parcel, pickup) — тоже ок
+    Возвращает список событий истории в нужном формате (последнее сверху).
+    Если истории нет — отдаём текущее состояние посылки.
     """
-    try:
-        _advance_local_flow(parcel, pickup, now)
-    except TypeError:
-        _advance_local_flow(parcel, pickup)
+    events = []
+    rel = getattr(parcel, "history", None)
+
+    if rel is not None:
+        for idx, h in enumerate(rel.all().order_by("-occurred_at", "-id")):
+            dt = getattr(h, "occurred_at", None) or h.created_at
+            events.append(
+                {
+                    "status_display": h.get_status_display(),
+                    "message": (h.message or ""),
+                    "datetime": _dt_str(dt),
+                    "is_latest": idx == 0,
+                }
+            )
+
+    if not events:
+        created = getattr(parcel, "created_at", None) or timezone.now()
+        events.append(
+            {
+                "status_display": parcel.get_status_display(),
+                "message": "",
+                "datetime": _dt_str(created),
+                "is_latest": True,
+            }
+        )
+
+    return events
 
 
 # ================== РЕГИСТРАЦИЯ ==================
@@ -217,18 +244,17 @@ def cabinet_home(request):
 
         return redirect("cabinet_home")
 
-    now = timezone.now()
+    now = timezone.now().replace(microsecond=0)
     pickup = getattr(profile, "pickup_point", None)
-
-    user_parcels = list(Parcel.objects.filter(user=request.user))
-
-    # авто-обновление статусов перед показом
-    for p in user_parcels:
-        _advance_cn(p, now)
-        _advance_local(p, pickup, now)
 
     user_parcels_qs = Parcel.objects.filter(user=request.user)
 
+    # авто-обновление статусов перед показом
+    for p in user_parcels_qs:
+        _advance_cn_flow(p, now)
+        _advance_local_flow(p, pickup, now)
+
+    # статистика
     status_counts = {1: 0, 2: 0, 3: 0, 4: 0}
     for row in user_parcels_qs.values("status").annotate(c=Count("id")):
         st = row["status"]
@@ -376,37 +402,10 @@ def parcel_history_view(request, pk: int):
     profile = getattr(request.user, "cabinet_profile", None)
     pickup = getattr(profile, "pickup_point", None)
 
-    _advance_cn(parcel, now)
-    _advance_local(parcel, pickup, now)
+    _advance_cn_flow(parcel, now)
+    _advance_local_flow(parcel, pickup, now)
 
-    events = []
-    qs = getattr(parcel, "history", None)
-
-    if qs is not None:
-        for idx, h in enumerate(qs.all().order_by("-occurred_at", "-id")):
-            dt = getattr(h, "occurred_at", None) or h.created_at
-            events.append(
-                {
-                    "status_display": h.get_status_display(),
-                    "message": (h.message or ""),
-                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    "is_latest": idx == 0,
-                }
-            )
-
-    if not events:
-        created = parcel.created_at if hasattr(parcel, "created_at") else now
-        events.append(
-            {
-                "status_display": parcel.get_status_display(),
-                "message": "",
-                "datetime": created.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_latest": True,
-            }
-        )
-
-    return JsonResponse({"track_number": parcel.track_number, "events": events})
-
+    return JsonResponse({"track_number": parcel.track_number, "events": _serialize_history(parcel)})
 
 
 # ================== РЕДИРЕКТ С ГЛАВНОЙ ==================
@@ -421,27 +420,31 @@ def index_redirect(request):
     return redirect("login")
 
 
-# ================== ПУБЛИЧНЫЙ ТРЕКИНГ (у тебя сейчас login_required) ==================
+# ================== "ПУБЛИЧНЫЙ" ТРЕКИНГ (сейчас оставляем под login) ==================
 
 
 @login_required
 @require_http_methods(["GET"])
 def track_public_lookup_view(request):
+    """
+    Сейчас это НЕ публичный трекинг, а "поиск в кабинете":
+    - отдаём только посылки пользователя
+    - не возвращаем parcel_id/history_url (чтобы не облегчать перебор)
+    """
     track = _normalize_track(request.GET.get("track") or "")
     if not track:
         return JsonResponse({"ok": False, "error": "empty_track"}, status=400)
 
-    parcel = Parcel.objects.filter(track_number__iexact=track).first()
+    parcel = Parcel.objects.filter(user=request.user, track_number__iexact=track).first()
     if not parcel:
         return JsonResponse({"ok": False, "error": "not_found"}, status=404)
 
-    now = timezone.now()
+    now = timezone.now().replace(microsecond=0)
+    profile = getattr(request.user, "cabinet_profile", None)
+    pickup = getattr(profile, "pickup_point", None)
 
-    _advance_cn(parcel, now)
-    if parcel.user_id:
-        owner_profile = getattr(parcel.user, "cabinet_profile", None)
-        owner_pickup = getattr(owner_profile, "pickup_point", None)
-        _advance_local(parcel, owner_pickup, now)
+    _advance_cn_flow(parcel, now)
+    _advance_local_flow(parcel, pickup, now)
 
     return JsonResponse(
         {
@@ -449,8 +452,7 @@ def track_public_lookup_view(request):
             "track_number": parcel.track_number,
             "status": parcel.status,
             "status_label": parcel.get_status_display(),
-            "parcel_id": parcel.id,
-            "history_url": f"/cabinet/api/parcels/{parcel.id}/history-public/",
+            "events": _serialize_history(parcel),
         }
     )
 
@@ -458,40 +460,16 @@ def track_public_lookup_view(request):
 @login_required
 @require_http_methods(["GET"])
 def parcel_history_public_view(request, pk: int):
-    parcel = get_object_or_404(Parcel, pk=pk)
+    """
+    Безопасность: нельзя смотреть чужие посылки по pk.
+    """
+    parcel = get_object_or_404(Parcel, pk=pk, user=request.user)
 
     now = timezone.now().replace(microsecond=0)
+    profile = getattr(request.user, "cabinet_profile", None)
+    pickup = getattr(profile, "pickup_point", None)
 
-    _advance_cn(parcel, now)
-    if parcel.user_id:
-        owner_profile = getattr(parcel.user, "cabinet_profile", None)
-        owner_pickup = getattr(owner_profile, "pickup_point", None)
-        _advance_local(parcel, owner_pickup, now)
+    _advance_cn_flow(parcel, now)
+    _advance_local_flow(parcel, pickup, now)
 
-    events = []
-    qs = getattr(parcel, "history", None)
-
-    if qs is not None:
-        for idx, h in enumerate(qs.all().order_by("-occurred_at", "-id")):
-            dt = getattr(h, "occurred_at", None) or h.created_at
-            events.append(
-                {
-                    "status_display": h.get_status_display(),
-                    "message": (h.message or ""),
-                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    "is_latest": idx == 0,
-                }
-            )
-
-    if not events:
-        created = parcel.created_at if hasattr(parcel, "created_at") else now
-        events.append(
-            {
-                "status_display": parcel.get_status_display(),
-                "message": "",
-                "datetime": created.strftime("%Y-%m-%d %H:%M:%S"),
-                "is_latest": True,
-            }
-        )
-
-    return JsonResponse({"track_number": parcel.track_number, "events": events})
+    return JsonResponse({"track_number": parcel.track_number, "events": _serialize_history(parcel)})
