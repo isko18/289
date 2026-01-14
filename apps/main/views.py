@@ -423,28 +423,37 @@ def index_redirect(request):
 # ================== "ПУБЛИЧНЫЙ" ТРЕКИНГ (сейчас оставляем под login) ==================
 
 
-@login_required
 @require_http_methods(["GET"])
 def track_public_lookup_view(request):
     """
-    Сейчас это НЕ публичный трекинг, а "поиск в кабинете":
-    - отдаём только посылки пользователя
-    - не возвращаем parcel_id/history_url (чтобы не облегчать перебор)
+    ПУБЛИЧНЫЙ трекинг:
+    - доступен всем
+    - только по трек-номеру
+    - без parcel_id и внутренних ссылок
     """
     track = _normalize_track(request.GET.get("track") or "")
     if not track:
-        return JsonResponse({"ok": False, "error": "empty_track"}, status=400)
+        return JsonResponse(
+            {"ok": False, "error": "empty_track"},
+            status=400
+        )
 
-    parcel = Parcel.objects.filter(user=request.user, track_number__iexact=track).first()
+    parcel = Parcel.objects.filter(track_number__iexact=track).first()
     if not parcel:
-        return JsonResponse({"ok": False, "error": "not_found"}, status=404)
+        return JsonResponse(
+            {"ok": False, "error": "not_found"},
+            status=404
+        )
 
     now = timezone.now().replace(microsecond=0)
-    profile = getattr(request.user, "cabinet_profile", None)
-    pickup = getattr(profile, "pickup_point", None)
 
+    # авто-обновление статусов
     _advance_cn_flow(parcel, now)
-    _advance_local_flow(parcel, pickup, now)
+
+    if parcel.user_id:
+        profile = getattr(parcel.user, "cabinet_profile", None)
+        pickup = getattr(profile, "pickup_point", None)
+        _advance_local_flow(parcel, pickup, now)
 
     return JsonResponse(
         {
@@ -455,7 +464,6 @@ def track_public_lookup_view(request):
             "events": _serialize_history(parcel),
         }
     )
-
 
 @login_required
 @require_http_methods(["GET"])
