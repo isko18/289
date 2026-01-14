@@ -372,7 +372,7 @@ def staff_parcels_view(request):
 def parcel_history_view(request, pk: int):
     parcel = get_object_or_404(Parcel, pk=pk, user=request.user)
 
-    now = timezone.now()
+    now = timezone.now().replace(microsecond=0)
     profile = getattr(request.user, "cabinet_profile", None)
     pickup = getattr(profile, "pickup_point", None)
 
@@ -383,12 +383,13 @@ def parcel_history_view(request, pk: int):
     qs = getattr(parcel, "history", None)
 
     if qs is not None:
-        for idx, h in enumerate(qs.all().order_by("-created_at")):
+        for idx, h in enumerate(qs.all().order_by("-occurred_at", "-id")):
+            dt = getattr(h, "occurred_at", None) or h.created_at
             events.append(
                 {
                     "status_display": h.get_status_display(),
-                    "message": getattr(h, "message", "") or "",
-                    "datetime": h.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": (h.message or ""),
+                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "is_latest": idx == 0,
                 }
             )
@@ -405,6 +406,7 @@ def parcel_history_view(request, pk: int):
         )
 
     return JsonResponse({"track_number": parcel.track_number, "events": events})
+
 
 
 # ================== РЕДИРЕКТ С ГЛАВНОЙ ==================
@@ -458,7 +460,7 @@ def track_public_lookup_view(request):
 def parcel_history_public_view(request, pk: int):
     parcel = get_object_or_404(Parcel, pk=pk)
 
-    now = timezone.now()
+    now = timezone.now().replace(microsecond=0)
 
     _advance_cn(parcel, now)
     if parcel.user_id:
@@ -470,12 +472,13 @@ def parcel_history_public_view(request, pk: int):
     qs = getattr(parcel, "history", None)
 
     if qs is not None:
-        for idx, h in enumerate(qs.all().order_by("-created_at")):
+        for idx, h in enumerate(qs.all().order_by("-occurred_at", "-id")):
+            dt = getattr(h, "occurred_at", None) or h.created_at
             events.append(
                 {
                     "status_display": h.get_status_display(),
-                    "message": getattr(h, "message", "") or "",
-                    "datetime": h.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "message": (h.message or ""),
+                    "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "is_latest": idx == 0,
                 }
             )

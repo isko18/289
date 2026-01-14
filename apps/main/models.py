@@ -1,17 +1,18 @@
+import hashlib
+
 from django.db import models
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 
-# Телефон в формате E.164 (например: +996XXXXXXXXX)
 phone_validator = RegexValidator(
     regex=r"^\+\d{6,15}$",
     message=_("Телефон должен быть в формате +<код><номер>, например +996700123456"),
 )
 
-# Трек: буквы/цифры и немного безопасных символов
 track_validator = RegexValidator(
     regex=r"^[A-Za-z0-9._\-]{1,64}$",
     message=_("Трек-номер может содержать только буквы/цифры и символы . _ -"),
@@ -19,10 +20,6 @@ track_validator = RegexValidator(
 
 
 class SiteSettings(models.Model):
-    """
-    Глобальные настройки витрины/кабинета.
-    Держим одну запись (singleton).
-    """
     title = models.CharField("Название проекта", max_length=100, default="kargoexpress")
 
     logo = models.ImageField(
@@ -57,7 +54,6 @@ class SiteSettings(models.Model):
         verbose_name_plural = "Настройки сайта"
 
     def save(self, *args, **kwargs):
-        # Жёсткий singleton: всегда id=1
         self.pk = 1
         super().save(*args, **kwargs)
 
@@ -119,7 +115,6 @@ class CabinetProfile(models.Model):
         verbose_name = "Профиль кабинета"
         verbose_name_plural = "Профили кабинета"
         constraints = [
-            # уникален только если не NULL и не пустая строка
             models.UniqueConstraint(
                 fields=["phone"],
                 condition=Q(phone__isnull=False) & ~Q(phone=""),
@@ -162,25 +157,55 @@ class Parcel(models.Model):
         db_index=True,
     )
 
-    auto_flow_started_at = models.DateTimeField("Старт авто-цепочки (Китай)", null=True, blank=True)
-    auto_flow_stage = models.PositiveSmallIntegerField("Этап авто-цепочки", default=0)
+    auto_flow_started_at = models.DateTimeField(
+        "Старт авто-цепочки (Китай)",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    auto_flow_stage = models.PositiveSmallIntegerField(
+        "Этап авто-цепочки",
+        default=0,
+        db_index=True,
+    )
 
-    local_flow_started_at = models.DateTimeField("Старт локальной цепочки (Киргизия)", null=True, blank=True)
-    local_flow_stage = models.PositiveSmallIntegerField("Этап локальной цепочки", default=0)
+    local_flow_started_at = models.DateTimeField(
+        "Старт локальной цепочки (Киргизия)",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    local_flow_stage = models.PositiveSmallIntegerField(
+        "Этап локальной цепочки",
+        default=0,
+        db_index=True,
+    )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta:
         verbose_name = "Посылка"
         verbose_name_plural = "Посылки"
         indexes = [
-            models.Index(fields=["created_at"]),
             models.Index(fields=["user", "status"]),
+            models.Index(fields=["status", "auto_flow_stage", "auto_flow_started_at"]),
+            models.Index(fields=["status", "local_flow_stage", "local_flow_started_at"]),
+            models.Index(
+                fields=["id"],
+                name="parcel_auto_flow_active_idx",
+                condition=Q(auto_flow_started_at__isnull=False) & ~Q(status=4),
+            ),
+            models.Index(
+                fields=["id"],
+                name="parcel_local_flow_active_idx",
+                condition=Q(local_flow_started_at__isnull=False) & ~Q(status=4),
+            ),
         ]
 
     def __str__(self):
         return self.track_number
+
 
 
 class ParcelHistory(models.Model):
@@ -190,17 +215,51 @@ class ParcelHistory(models.Model):
         related_name="history",
         verbose_name="Посылка",
     )
-    status = models.PositiveSmallIntegerField("Статус", choices=Parcel.Status.choices, db_index=True)
+
+    status = models.PositiveSmallIntegerField(
+        "Статус",
+        choices=Parcel.Status.choices,
+        db_index=True,
+    )
+
     message = models.TextField("Сообщение", blank=True)
+
+    message_hash = models.CharField(
+        "Хэш сообщения",
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="SHA-256 от message для идемпотентности без тяжёлого индекса по TextField.",
+    )
+
+    occurred_at = models.DateTimeField(
+        "Время события",
+        default=timezone.now,
+        db_index=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "История посылки"
         verbose_name_plural = "История посылок"
-        ordering = ("-created_at",)
+        ordering = ("-occurred_at", "-id")
         indexes = [
-            models.Index(fields=["parcel", "created_at"]),
+            models.Index(fields=["parcel", "occurred_at"]),
+            models.Index(fields=["parcel", "status", "occurred_at"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parcel", "status", "occurred_at", "message_hash"],
+                name="uniq_parcel_history_event_hash",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        msg = (self.message or "").strip()
+        self.message_hash = hashlib.sha256(msg.encode("utf-8")).hexdigest() if msg else ""
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.parcel.track_number}: {self.get_status_display()}"
