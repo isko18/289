@@ -12,8 +12,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const recentList = document.getElementById("staffRecentList");
 
-  const normTrack = (v) => String(v || "").replace(/\s+/g, "").trim();
+  const TRACK_MIN_LEN = 6;
+  const TRACK_MAX_LEN = 18;
+  
+  const normTrack = (v) => String(v || "").replace(/\s+/g, "").trim().toUpperCase();
   const normNote = (v) => String(v || "").trim();
+  
+  function showError(message) {
+    // если есть существующий элемент ошибки - используем его
+    let errorDiv = alertError;
+    
+    if (!errorDiv) {
+      // создаем новый элемент ошибки если его нет
+      errorDiv = document.createElement("div");
+      errorDiv.id = "staffAlertError";
+      errorDiv.className = "alert alert--error";
+      
+      // вставляем перед формой
+      if (form && form.parentNode) {
+        form.parentNode.insertBefore(errorDiv, form);
+      }
+    }
+    
+    errorDiv.textContent = message;
+    errorDiv.style.display = "block";
+    errorDiv.classList.remove("alert--fade-out");
+    
+    // скрываем сообщение об успехе если есть
+    if (alertSuccess) {
+      alertSuccess.style.display = "none";
+    }
+    
+    // автоскрытие через 5 секунд
+    setTimeout(() => {
+      if (errorDiv && errorDiv.parentNode) {
+        errorDiv.classList.add("alert--fade-out");
+        setTimeout(() => {
+          if (errorDiv && errorDiv.parentNode) {
+            errorDiv.style.display = "none";
+          }
+        }, 400);
+      }
+    }, 5000);
+    
+    // прокручиваем к ошибке
+    errorDiv.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 
   // автофокус на поле сканера
   if (trackInput) {
@@ -66,10 +110,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // чистим пробелы перед отправкой (финальный контроль)
   if (form && trackInput) {
-    form.addEventListener("submit", () => {
-      trackInput.value = normTrack(trackInput.value);
+    form.addEventListener("submit", (e) => {
+      const rawValue = (trackInput.value || "").trim().replace(/\s+/g, "").toUpperCase();
+      
+      // проверка длины трек-номера до обрезки
+      if (rawValue.length > 0) {
+        if (rawValue.length < TRACK_MIN_LEN) {
+          e.preventDefault();
+          showError(`Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов). Введено: ${rawValue.length}.`);
+          trackInput.value = rawValue;
+          trackInput.focus();
+          trackInput.select();
+          return false;
+        }
+        if (rawValue.length > TRACK_MAX_LEN) {
+          e.preventDefault();
+          showError(`Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов). Введено: ${rawValue.length}.`);
+          trackInput.value = rawValue.slice(0, TRACK_MAX_LEN);
+          trackInput.focus();
+          trackInput.select();
+          return false;
+        }
+      }
+      
+      const cleaned = normTrack(trackInput.value);
+      trackInput.value = cleaned;
       if (noteTextarea) noteTextarea.value = normNote(noteTextarea.value);
       // страница перезагрузится, после загрузки снова будет автофокус
+    });
+  }
+  
+  // показываем предупреждение при вводе слишком длинного трека
+  if (trackInput) {
+    trackInput.addEventListener("input", () => {
+      const rawValue = (trackInput.value || "").trim().replace(/\s+/g, "").toUpperCase();
+      
+      // добавляем/убираем класс для стилизации
+      if (rawValue.length > TRACK_MAX_LEN) {
+        trackInput.style.borderColor = "#dc3545";
+        trackInput.title = `Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов). Введено: ${rawValue.length}.`;
+      } else if (rawValue.length > 0 && rawValue.length < TRACK_MIN_LEN) {
+        trackInput.style.borderColor = "#ffc107";
+        trackInput.title = `Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов). Введено: ${rawValue.length}.`;
+      } else {
+        trackInput.style.borderColor = "";
+        trackInput.title = "";
+      }
     });
   }
 

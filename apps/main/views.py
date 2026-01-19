@@ -1,3 +1,4 @@
+from datetime import timezone as dt_timezone
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
@@ -52,8 +53,10 @@ def _normalize_track(track: str) -> str:
 
     t = t.upper()
 
-    max_len = Parcel._meta.get_field("track_number").max_length
-    if len(t) > max_len:
+    min_len = 6
+    max_len = 18
+    
+    if len(t) < min_len or len(t) > max_len:
         return ""
 
     try:
@@ -65,7 +68,22 @@ def _normalize_track(track: str) -> str:
 
 
 def _dt_str(dt) -> str:
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
+    """
+    Форматирует datetime в ISO формат с UTC временной зоной для правильного парсинга во фронтенде.
+    """
+    if dt is None:
+        return ""
+    
+    # Преобразуем в UTC
+    if timezone.is_aware(dt):
+        # Если datetime aware, преобразуем в UTC
+        dt_utc = dt.astimezone(dt_timezone.utc)
+    else:
+        # Если naive, делаем aware используя часовой пояс сервера, затем в UTC
+        dt_aware = timezone.make_aware(dt)
+        dt_utc = dt_aware.astimezone(dt_timezone.utc)
+    
+    return dt_utc.isoformat().replace("+00:00", "Z")
 
 
 def _serialize_history(parcel: Parcel):
@@ -224,12 +242,55 @@ def cabinet_home(request):
     if request.method == "POST":
         raw_tracks = request.POST.getlist("tracks")
         cleaned = []
+        errors = []
 
-        for t in raw_tracks:
+        for idx, t in enumerate(raw_tracks, 1):
+            t_raw = (t or "").strip()
+            if not t_raw:
+                continue
+                
+            t_upper = t_raw.replace(" ", "").upper()
+            
+            if len(t_upper) < 6:
+                errors.append(f"Трек-номер #{idx} слишком короткий (минимум 6 символов).")
+                continue
+            elif len(t_upper) > 18:
+                errors.append(f"Трек-номер #{idx} слишком длинный (максимум 18 символов).")
+                continue
+            
             t2 = _normalize_track(t)
             if not t2:
+                errors.append(f"Трек-номер #{idx} имеет недопустимый формат.")
                 continue
             cleaned.append(t2)
+
+        if errors:
+            context = {
+                "user_profile": profile,
+                "parcels": Parcel.objects.filter(user=request.user).order_by("-created_at"),
+                "status_count_1": 0,
+                "status_count_2": 0,
+                "status_count_3": 0,
+                "status_count_4": 0,
+                "track_errors": errors,
+            }
+            # пересчитываем статистику
+            now = timezone.now().replace(microsecond=0)
+            pickup = getattr(profile, "pickup_point", None)
+            user_parcels_qs = Parcel.objects.filter(user=request.user)
+            for p in user_parcels_qs:
+                _advance_cn_flow(p, now)
+                _advance_local_flow(p, pickup, now)
+            status_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+            for row in user_parcels_qs.values("status").annotate(c=Count("id")):
+                st = row["status"]
+                if st in status_counts:
+                    status_counts[st] = row["c"]
+            context["status_count_1"] = status_counts[1]
+            context["status_count_2"] = status_counts[2]
+            context["status_count_3"] = status_counts[3]
+            context["status_count_4"] = status_counts[4]
+            return render(request, "cabinet_home.html", context)
 
         cleaned = cleaned[:5]
 
@@ -366,18 +427,29 @@ def staff_parcels_view(request):
     success_message = ""
 
     if request.method == "POST":
-        track_raw = request.POST.get("track_number", "")
-        track = _normalize_track(track_raw)
-
-        if not track:
-            error_message = "Укажите корректный трек-номер."
+        track_raw = request.POST.get("track_number", "").strip()
+        
+        if not track_raw:
+            error_message = "Укажите трек-номер."
         else:
-            try:
-                success_message = _process_staff_scan(request.user, track)
-            except ValueError as e:
-                error_message = str(e)
-            except Exception:
-                error_message = "Ошибка обработки трек-номера."
+            track_upper = track_raw.replace(" ", "").upper()
+            
+            if len(track_upper) < 6:
+                error_message = f"Трек-номер слишком короткий (минимум 6 символов). Введено: {len(track_upper)}."
+            elif len(track_upper) > 18:
+                error_message = f"Трек-номер слишком длинный (максимум 18 символов). Введено: {len(track_upper)}."
+            else:
+                track = _normalize_track(track_raw)
+                
+                if not track:
+                    error_message = "Трек-номер имеет недопустимый формат."
+                else:
+                    try:
+                        success_message = _process_staff_scan(request.user, track)
+                    except ValueError as e:
+                        error_message = str(e)
+                    except Exception:
+                        error_message = "Ошибка обработки трек-номера."
 
     recent_parcels = Parcel.objects.order_by("-created_at")[:30]
     return render(

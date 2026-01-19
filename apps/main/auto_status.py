@@ -25,9 +25,14 @@ def _sanitize_track(track_number: str) -> str:
     # нормализация регистра, чтобы не было дублей типа ab12 и AB12
     track = track.upper()
 
-    max_len = Parcel._meta.get_field("track_number").max_length
+    min_len = 6
+    max_len = 18
+    
+    if len(track) < min_len:
+        raise ValueError(f"Трек-номер слишком короткий (минимум {min_len} символов).")
+    
     if len(track) > max_len:
-        raise ValueError(f"Трек-номер слишком длинный (макс {max_len}).")
+        raise ValueError(f"Трек-номер слишком длинный (максимум {max_len} символов).")
 
     # валидируем по тому же правилу, что и модель
     track_validator(track)
@@ -122,7 +127,7 @@ def _advance_cn_flow(parcel: Parcel, now) -> None:
         changed = True
 
     if changed:
-        parcel.save(update_fields=["status", "auto_flow_stage", "updated_at"])
+        parcel.save(update_fields=["status", "auto_flow_stage"])
 
 
 def _advance_local_flow(parcel: Parcel, pickup_point, now) -> None:
@@ -174,7 +179,6 @@ def _process_staff_scan(user, track_number: str) -> str:
                     "auto_flow_stage",
                     "local_flow_started_at",
                     "local_flow_stage",
-                    "updated_at",
                 ]
             )
 
@@ -224,6 +228,6 @@ def _process_staff_scan(user, track_number: str) -> str:
 
         parcel.status = Parcel.Status.AT_PICKUP
         parcel.local_flow_stage = max(parcel.local_flow_stage or 0, 3)
-        parcel.save(update_fields=["status", "local_flow_stage", "updated_at"])
+        parcel.save(update_fields=["status", "local_flow_stage"])
 
         return "2 скан: Товар прибыл в пункт выдачи."

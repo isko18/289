@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ====== DOM ======
   const trackAddForm = document.getElementById("trackAddForm");
   const trackAddInputsContainer = document.getElementById("trackAddInputs");
+  const trackAddErrors = document.getElementById("trackAddErrors");
   const trackResetBtn = document.getElementById("trackResetBtn");
 
   const statusCards = document.querySelectorAll(".status-card");
@@ -22,25 +23,44 @@ document.addEventListener("DOMContentLoaded", () => {
   const trackSearchInput = document.getElementById("trackSearchInput");
   const trackSearchError = document.getElementById("trackSearchError");
 
-  const TRACK_MAX_LEN = 64;
+  const TRACK_MIN_LEN = 6;
+  const TRACK_MAX_LEN = 18;
 
   // ====== UTILS ======
 
   function formatBeijingTime(dateStr) {
-  if (!dateStr) return "";
+    if (!dateStr) return "";
 
-  const d = new Date(dateStr.replace(" ", "T"));
+    // Поддержка двух форматов:
+    // 1. ISO формат с Z (UTC): "2024-01-01T12:00:00Z"
+    // 2. Старый формат без временной зоны: "2024-01-01 12:00:00"
+    let date;
+    
+    if (dateStr.includes("T") && (dateStr.includes("Z") || dateStr.includes("+"))) {
+      // ISO формат с временной зоной
+      date = new Date(dateStr);
+    } else {
+      // Старый формат без временной зоны - считаем что это UTC
+      const isoStr = dateStr.replace(" ", "T");
+      // Если нет Z или временной зоны, добавляем Z (UTC)
+      date = new Date(isoStr + (isoStr.includes("Z") || isoStr.includes("+") ? "" : "Z"));
+    }
 
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Asia/Shanghai", // Пекин
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(d);
-}
+    // Проверяем что дата валидна
+    if (isNaN(date.getTime())) {
+      return dateStr; // Возвращаем исходную строку если не удалось распарсить
+    }
+
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Asia/Shanghai", // Пекин
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(date);
+  }
 
   function openModal(modalEl) {
     if (!modalEl) return;
@@ -71,6 +91,17 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/\s+/g, "")
       .toUpperCase()
       .slice(0, TRACK_MAX_LEN);
+  }
+
+  function validateTrackLength(track) {
+    const cleaned = cleanTrack(track);
+    if (cleaned.length < TRACK_MIN_LEN) {
+      return `Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов).`;
+    }
+    if (cleaned.length > TRACK_MAX_LEN) {
+      return `Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов).`;
+    }
+    return null;
   }
 
   function statusLabel(status) {
@@ -190,6 +221,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!inputs.length) return;
 
       updateResetVisibility();
+      
+      // визуальная индикация для всех полей
+      inputs.forEach((inp) => {
+        const rawValue = (inp.value || "").trim().replace(/\s+/g, "").toUpperCase();
+        
+        if (rawValue.length > TRACK_MAX_LEN) {
+          inp.style.borderColor = "#dc3545";
+          inp.title = `Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов). Введено: ${rawValue.length}.`;
+        } else if (rawValue.length > 0 && rawValue.length < TRACK_MIN_LEN) {
+          inp.style.borderColor = "#ffc107";
+          inp.title = `Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов). Введено: ${rawValue.length}.`;
+        } else {
+          inp.style.borderColor = "";
+          inp.title = "";
+        }
+      });
 
       if (inputs.length >= MAX_INPUTS) return;
 
@@ -208,8 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
         input.name = "tracks";
         input.type = "text";
         input.className = "input";
-        input.placeholder = "Трек-номер";
-        input.maxLength = TRACK_MAX_LEN;
+        input.placeholder = "Трек-номер (6-18 символов)";
         input.autocomplete = "off";
         input.addEventListener("input", onInputChange);
         trackAddInputsContainer.appendChild(input);
@@ -218,7 +264,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const firstInput = trackAddInputsContainer.querySelector("input[name='tracks']");
     if (firstInput) {
-      firstInput.maxLength = TRACK_MAX_LEN;
       firstInput.autocomplete = "off";
       firstInput.addEventListener("input", onInputChange);
     }
@@ -233,8 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
         input.name = "tracks";
         input.type = "text";
         input.className = "input";
-        input.placeholder = "Трек-номер";
-        input.maxLength = TRACK_MAX_LEN;
+        input.placeholder = "Трек-номер (6-18 символов)";
         input.autocomplete = "off";
         input.addEventListener("input", onInputChange);
         trackAddInputsContainer.appendChild(input);
@@ -250,13 +294,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // перед отправкой формы чистим пробелы и приводим к UPPER
   if (trackAddForm && trackAddInputsContainer) {
-    trackAddForm.addEventListener("submit", () => {
+    trackAddForm.addEventListener("submit", (e) => {
+      // скрываем предыдущие ошибки
+      if (trackAddErrors) {
+        trackAddErrors.style.display = "none";
+        trackAddErrors.innerHTML = "";
+      }
+      
       const inputs = Array.from(
         trackAddInputsContainer.querySelectorAll("input[name='tracks']")
       );
-      inputs.forEach((inp) => {
-        inp.value = cleanTrack(inp.value);
+      
+      const errors = [];
+      inputs.forEach((inp, idx) => {
+        const rawValue = (inp.value || "").trim().replace(/\s+/g, "").toUpperCase();
+        
+        if (rawValue.length === 0) {
+          return; // пропускаем пустые поля
+        }
+        
+        // проверяем длину (не обрезаем, чтобы пользователь видел что ввел)
+        if (rawValue.length < TRACK_MIN_LEN) {
+          errors.push(`Трек-номер #${idx + 1} слишком короткий (минимум ${TRACK_MIN_LEN} символов). Введено: ${rawValue.length}.`);
+        } else if (rawValue.length > TRACK_MAX_LEN) {
+          errors.push(`Трек-номер #${idx + 1} слишком длинный (максимум ${TRACK_MAX_LEN} символов). Введено: ${rawValue.length}.`);
+        } else {
+          // нормализуем значение (убираем пробелы, uppercase)
+          inp.value = rawValue;
+        }
       });
+      
+      if (errors.length > 0) {
+        e.preventDefault();
+        
+        // показываем ошибки на странице
+        if (trackAddErrors) {
+          trackAddErrors.innerHTML = errors.map(err => `<p style="margin: 0.25rem 0;">${escapeHtml(err)}</p>`).join("");
+          trackAddErrors.style.display = "block";
+          
+          // прокручиваем к ошибкам
+          trackAddErrors.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        
+        return false;
+      }
     });
   }
 
@@ -384,16 +465,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ====== ПОИСК "ОТСЛЕДИТЬ ТОВАР" (поиск в кабинете; backend возвращает events) ======
   if (trackSearchForm && trackSearchInput) {
-    trackSearchInput.maxLength = TRACK_MAX_LEN;
-    trackSearchInput.addEventListener("input", () => setSearchMsg(""));
+    trackSearchInput.addEventListener("input", () => {
+      setSearchMsg("");
+      
+      // визуальная индикация длины
+      const rawValue = (trackSearchInput.value || "").trim().replace(/\s+/g, "").toUpperCase();
+      if (rawValue.length > TRACK_MAX_LEN) {
+        trackSearchInput.style.borderColor = "#dc3545";
+        trackSearchInput.title = `Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов). Введено: ${rawValue.length}.`;
+      } else if (rawValue.length > 0 && rawValue.length < TRACK_MIN_LEN) {
+        trackSearchInput.style.borderColor = "#ffc107";
+        trackSearchInput.title = `Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов). Введено: ${rawValue.length}.`;
+      } else {
+        trackSearchInput.style.borderColor = "";
+        trackSearchInput.title = "";
+      }
+    });
 
     trackSearchForm.addEventListener("submit", async (e) => {
       e.preventDefault();
 
+      const rawTrack = trackSearchInput.value.trim().replace(/\s+/g, "").toUpperCase();
+      
+      // проверяем длину до обрезки
+      if (rawTrack.length < TRACK_MIN_LEN) {
+        setSearchMsg(`Трек-номер слишком короткий (минимум ${TRACK_MIN_LEN} символов).`);
+        return;
+      }
+      if (rawTrack.length > TRACK_MAX_LEN) {
+        setSearchMsg(`Трек-номер слишком длинный (максимум ${TRACK_MAX_LEN} символов).`);
+        return;
+      }
+      
       const track = cleanTrack(trackSearchInput.value);
       trackSearchInput.value = track;
 
-      if (!track) return;
+      if (!track) {
+        setSearchMsg("Введите трек-номер.");
+        return;
+      }
 
       try {
         const res = await fetch(
