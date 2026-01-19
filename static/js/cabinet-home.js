@@ -187,7 +187,6 @@ document.addEventListener("DOMContentLoaded", () => {
               <p class="${titleClass}">${htmlWithLineBreaks(title)}</p>
               <p class="timeline-item__date">
   ${escapeHtml(formatBeijingTime(e.datetime))}
-  <span style="opacity:.6;font-size:.85em;">(Пекин)</span>
 </p>
 
             </div>
